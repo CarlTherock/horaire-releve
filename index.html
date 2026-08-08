@@ -494,9 +494,11 @@ footer a{color:var(--text-dim);}
     -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;
   }
   /* On masque tout le contenu normal de l'appli et on n'affiche que la zone d'impression,
-     générée dynamiquement — évite les pages blanches (aucun contenu caché ne conserve d'espace). */
-  body.printing-grid .wrap{ display:none !important; }
-  body.printing-grid #printRoot{ display:block !important; }
+     générée dynamiquement — évite les pages blanches (aucun contenu caché ne conserve d'espace).
+     Piloté uniquement par le media query @print (pas de classe JS) : reste correct peu importe
+     l'appareil ou les changements d'orientation faits dans l'aperçu d'impression. */
+  .wrap{ display:none !important; }
+  #printRoot{ display:block !important; }
 
   .print-week-block{
     background:#fff; color:#1a1f27;
@@ -1677,24 +1679,13 @@ function buildPrintWeekBlock(wIndex){
     <table class="schedule"><thead><tr>${headHTML}</tr></thead><tbody>${bodyHTML}</tbody></table>
   </div>`;
 }
+/* #printRoot est rempli avant l'impression et laissé tel quel après : le CSS (@media print)
+   décide seul de ce qui s'affiche, donc aucun état JS ne peut se désynchroniser si l'utilisateur
+   change l'orientation ou rouvre l'aperçu d'impression. */
 function printWeeks(indices){
   document.getElementById('printRoot').innerHTML = indices.map(buildPrintWeekBlock).join('');
-  document.body.classList.add('printing-grid');
   window.print();
 }
-function endPrintingGrid(){
-  document.body.classList.remove('printing-grid');
-  document.getElementById('printRoot').innerHTML = '';
-}
-/* afterprint se déclenche trop tôt sur Safari/iOS (avant même l'ouverture de la
-   feuille d'impression système), ce qui casse la mise en page lors d'un changement
-   d'orientation dans l'aperçu. On nettoie plutôt au retour réel dans l'app. */
-window.addEventListener('afterprint', endPrintingGrid);
-document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState==='visible' && document.body.classList.contains('printing-grid')){
-    endPrintingGrid();
-  }
-});
 
 document.getElementById('printGridBtn').onclick = ()=> printWeeks([weekIndex]);
 document.getElementById('print4WeeksBtn').onclick = ()=>{
