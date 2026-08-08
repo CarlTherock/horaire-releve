@@ -1,4 +1,4 @@
-const CACHE_NAME = 'horaire-releve-v4';
+const CACHE_NAME = 'horaire-releve-v5';
 const ASSETS = [
   './index.html',
   './manifest.json',
