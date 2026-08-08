@@ -161,14 +161,9 @@ header{
 }
 .brand{display:flex;align-items:center;gap:14px;}
 .brand-mark{
-  width:46px;height:46px;border-radius:8px;
-  background:linear-gradient(155deg,var(--jour) 0%, var(--jour) 48%, var(--nuit) 52%, var(--nuit) 100%);
-  position:relative;flex:none;
+  width:46px;height:46px;border-radius:10px;
+  flex:none;display:block;
   box-shadow:0 0 0 1px rgba(255,255,255,0.06), 0 6px 18px rgba(0,0,0,0.4);
-}
-.brand-mark::after{
-  content:"";position:absolute;inset:9px;border-radius:4px;
-  background:var(--panel);
 }
 .brand-text .eyebrow{
   font-family:'JetBrains Mono',monospace;
@@ -549,7 +544,7 @@ footer a{color:var(--text-dim);}
 
   <header>
     <div class="brand">
-      <div class="brand-mark"></div>
+      <img class="brand-mark" src="./icon-192-v3.png" alt="" width="46" height="46">
       <div class="brand-text">
         <div class="eyebrow">Entretien — Mécanique / Électro-instrumentation</div>
         <h1>Simulateur d'horaire de Relève Windsor</h1>
