@@ -90,6 +90,7 @@ body{
 .day-card.gap .status .hours{color:var(--alert);}
 .shift.vac{background:rgba(143,165,189,0.12);color:#a9bbd0;border:1px solid rgba(143,165,189,0.35);}
 .shift.conge{background:rgba(154,178,145,0.12);color:#a9cfa0;border:1px solid rgba(154,178,145,0.4);}
+.shift.maladie{background:rgba(216,120,160,0.12);color:#e6a0c4;border:1px solid rgba(216,120,160,0.4);}
 .day-card.conge .status .hours{color:#a9cfa0;}
 .shift.ferie{background:rgba(89,194,166,0.1);color:#59c2a6;border:1px solid rgba(89,194,166,0.4);}
 .shift.eq{background:rgba(88,182,217,0.1);color:#6fc4e8;border:1px solid rgba(88,182,217,0.4);}
@@ -369,6 +370,7 @@ tr:hover td.emp-col{background:#1a222d;}
 .vac-week-btn:hover{color:var(--text-dim);border-color:#3a4a5e;}
 .vac-week-btn.active{background:rgba(154,178,145,0.18);border-color:#9abf91;color:#c9e0c1;}
 .vac-week-btn.vac-btn-vac.active{background:rgba(143,165,189,0.18);border-color:#8fa5bd;color:#c6d2df;}
+.vac-week-btn.vac-btn-maladie.active{background:rgba(216,120,160,0.18);border-color:#d878a0;color:#e6a0c4;}
 
 .shift-cell.toggle-vac{cursor:pointer;}
 .shift-cell.toggle-vac:hover .shift{outline:1px dashed var(--text-dim2);outline-offset:1px;}
@@ -531,6 +533,7 @@ footer a{color:var(--text-dim);}
   .print-week-block .shift.ot{ background:#e0b93a !important; color:#2a1c00; border-color:#a3860f; font-weight:600; }
   .print-week-block .shift.vac{ background:#6d7f92 !important; color:#ffffff; border-color:#4d5b69; font-weight:600; }
   .print-week-block .shift.conge{ background:#5f9e51 !important; color:#ffffff; border-color:#3f6f35; font-weight:600; }
+  .print-week-block .shift.maladie{ background:#c0538a !important; color:#ffffff; border-color:#8a3963; font-weight:600; }
   .print-week-block .shift.gap{ background:#d64c3f !important; color:#ffffff; border-color:#a3352b; font-weight:600; }
   .print-week-block .shift.reg{ background:#3f76ad !important; color:#ffffff; border-color:#28517a; font-weight:600; }
   .print-week-block .shift.off{ color:#8a939e; border:none; background:none; }
@@ -600,6 +603,7 @@ footer a{color:var(--text-dim);}
     <span><span class="swatch" style="background:#59c2a6"></span> Congés-Fériés</span>
     <span><span class="swatch" style="background:#a9bbd0"></span> Vacances</span>
     <span><span class="swatch" style="background:#a9cfa0"></span> Congé</span>
+    <span><span class="swatch" style="background:#e6a0c4"></span> Maladie</span>
     <span><span class="swatch" style="background:#6fc4e8"></span> Renfort de jour (EQ RELEVE)</span>
     <span><span class="swatch" style="background:var(--alert)"></span> Quart non couvert</span>
   </div>
@@ -1113,7 +1117,9 @@ function baseCellStatus(empCode, dayIdx){
 
   if(isVacDay(empCode, dayIdx, w)){
     const t = vacType(empCode, dayIdx, w);
-    return t==='vac' ? {cls:'vac', hours:'Vacances', tag:null} : {cls:'conge', hours:'Congé', tag:null};
+    if(t==='vac') return {cls:'vac', hours:'Vacances', tag:null};
+    if(t==='maladie') return {cls:'maladie', hours:'Maladie', tag:null};
+    return {cls:'conge', hours:'Congé', tag:null};
   }
 
   if(empCode==='E' || empCode==='F'){
@@ -1285,8 +1291,10 @@ function renderChips(){
     const workDays = w.days.map((day,i)=>i).filter(i=>worksThisDay(code,i,w));
     const allWorkOn = workDays.length>0 && workDays.every(i=>vacDays.has(code+'|'+ymd(w.days[i].date)));
     const allWeekVac = w.days.every((day,i)=>vacType(code,i,w)==='vac');
+    const allWeekMaladie = w.days.every((day,i)=>vacType(code,i,w)==='maladie');
     let html = `<span class="letter-chip">${code}</span><span class="vac-name">${name}</span>`;
     html += `<button class="vac-week-btn vac-btn-vac${allWeekVac?' active':''}" data-mode="vac" title="Marque toute la semaine (7 jours) comme Vacances officielle">Vacance</button>`;
+    html += `<button class="vac-week-btn vac-btn-maladie${allWeekMaladie?' active':''}" data-mode="maladie" title="Marque toute la semaine (7 jours) comme Maladie (traitée comme une vacance pour le comblement)">Maladie</button>`;
     html += `<button class="vac-week-btn${allWorkOn?' active':''}" data-mode="conge-all" title="Marque tous les jours travaillés cette semaine comme Congé">Toute la sem.</button>`;
     html += `<div class="vac-day-btns">`;
     workDays.forEach(i=>{
@@ -1302,6 +1310,17 @@ function renderChips(){
       w.days.forEach((day,i)=>{
         const key = code+'|'+ymd(day.date);
         if(nowAllVac) vacDays.delete(key); else vacDays.set(key, 'vac');
+      });
+      simResult = null;
+      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+      document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+      saveState();
+    };
+    row.querySelector('[data-mode="maladie"]').onclick = ()=>{
+      const nowAllMaladie = w.days.every((day,i)=>vacType(code,i,w)==='maladie');
+      w.days.forEach((day,i)=>{
+        const key = code+'|'+ymd(day.date);
+        if(nowAllMaladie) vacDays.delete(key); else vacDays.set(key, 'maladie');
       });
       simResult = null;
       renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
