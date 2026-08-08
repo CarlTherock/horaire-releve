@@ -1090,19 +1090,10 @@ function computeCell(empCode, dayIdx){
 
   if(empCode==='X') return {cls:'off', hours:'—', tag:null};
 
-  if(simResult){
-    const override = simResult.find(a=>a.who===empCode && a.dayIdx===dayIdx);
-    if(override){
-      const hours = override.shift==='j' ? '7:00–19:00' : '19:00–7:00';
-      let cls='reg';
-      if(override.result.type==='jo') cls='jo';
-      else if(override.result.type==='ot') cls='ot';
-      else if(override.result.type==='gap') cls='gap';
-      else cls='n';
-      return {cls, hours, tag: override.result.label};
-    }
-  }
-
+  // Remarque : la case de l'employé ABSENT (celui qui a déclenché le comblement) ne doit PAS être
+  // écrasée par le résultat de la simulation — elle doit continuer d'afficher son statut réel
+  // (Vacances / Congé / Maladie) via baseCellStatus, peu importe qui le remplace. Le détail du
+  // remplacement (qui comble, avec quel type) reste visible dans le panneau de résultats.
   return baseCellStatus(empCode, dayIdx);
 }
 
