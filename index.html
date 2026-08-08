@@ -1682,9 +1682,18 @@ function printWeeks(indices){
   document.body.classList.add('printing-grid');
   window.print();
 }
-window.addEventListener('afterprint', ()=>{
+function endPrintingGrid(){
   document.body.classList.remove('printing-grid');
   document.getElementById('printRoot').innerHTML = '';
+}
+/* afterprint se déclenche trop tôt sur Safari/iOS (avant même l'ouverture de la
+   feuille d'impression système), ce qui casse la mise en page lors d'un changement
+   d'orientation dans l'aperçu. On nettoie plutôt au retour réel dans l'app. */
+window.addEventListener('afterprint', endPrintingGrid);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && document.body.classList.contains('printing-grid')){
+    endPrintingGrid();
+  }
 });
 
 document.getElementById('printGridBtn').onclick = ()=> printWeeks([weekIndex]);
