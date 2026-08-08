@@ -1291,10 +1291,10 @@ function renderChips(){
     const workDays = w.days.map((day,i)=>i).filter(i=>worksThisDay(code,i,w));
     const allWorkOn = workDays.length>0 && workDays.every(i=>vacDays.has(code+'|'+ymd(w.days[i].date)));
     const allWeekVac = w.days.every((day,i)=>vacType(code,i,w)==='vac');
-    const allWeekMaladie = w.days.every((day,i)=>vacType(code,i,w)==='maladie');
+    const allWeekMaladie = workDays.length>0 && workDays.every(i=>vacType(code,i,w)==='maladie');
     let html = `<span class="letter-chip">${code}</span><span class="vac-name">${name}</span>`;
     html += `<button class="vac-week-btn vac-btn-vac${allWeekVac?' active':''}" data-mode="vac" title="Marque toute la semaine (7 jours) comme Vacances officielle">Vacance</button>`;
-    html += `<button class="vac-week-btn vac-btn-maladie${allWeekMaladie?' active':''}" data-mode="maladie" title="Marque toute la semaine (7 jours) comme Maladie (traitée comme une vacance pour le comblement)">Maladie</button>`;
+    html += `<button class="vac-week-btn vac-btn-maladie${allWeekMaladie?' active':''}" data-mode="maladie" title="Marque tous les jours travaillés cette semaine comme Maladie (traitée comme une vacance pour le comblement)">Maladie</button>`;
     html += `<button class="vac-week-btn${allWorkOn?' active':''}" data-mode="conge-all" title="Marque tous les jours travaillés cette semaine comme Congé">Toute la sem.</button>`;
     html += `<div class="vac-day-btns">`;
     workDays.forEach(i=>{
@@ -1317,9 +1317,9 @@ function renderChips(){
       saveState();
     };
     row.querySelector('[data-mode="maladie"]').onclick = ()=>{
-      const nowAllMaladie = w.days.every((day,i)=>vacType(code,i,w)==='maladie');
-      w.days.forEach((day,i)=>{
-        const key = code+'|'+ymd(day.date);
+      const nowAllMaladie = workDays.length>0 && workDays.every(i=>vacType(code,i,w)==='maladie');
+      workDays.forEach(i=>{
+        const key = code+'|'+ymd(w.days[i].date);
         if(nowAllMaladie) vacDays.delete(key); else vacDays.set(key, 'maladie');
       });
       simResult = null;
