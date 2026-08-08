@@ -1,4 +1,4 @@
-const CACHE_NAME = 'horaire-releve-v2';
+const CACHE_NAME = 'horaire-releve-v3';
 const ASSETS = [
   './index.html',
   './manifest.json',
@@ -23,6 +23,19 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Navigation (chargement de la page) : réseau en premier pour toujours avoir la
+  // dernière version quand il y a internet, avec repli sur le cache hors-ligne.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
