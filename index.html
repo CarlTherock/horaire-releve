@@ -652,7 +652,8 @@ footer a{color:var(--text-dim);}
           </p>
         </div>
         <button class="run-btn" id="runSim">Simuler le comblement</button>
-        <button class="reset-btn" id="resetSim">Réinitialiser la simulation</button>
+        <button class="reset-btn" id="resetWeekSim">Réinitialiser la semaine courante</button>
+        <button class="reset-btn" id="resetAllSim">Tout réinitialiser</button>
       </div>
       <div class="result-box" id="resultBox">
         <div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation. Le moteur applique l'ordre de comblement (Jo en commençant par la lettre E) et, en cas de vacances simultanées créant jusqu'à 4 quarts non couverts, la règle des pires quarts (max. 2 quarts en surtemps, le reste cédulé à un employé de jour à temps régulier).</div>
@@ -930,6 +931,44 @@ let simResult = null;
 let viewMode = 'grid'; // 'grid' | 'day'
 let currentDayIdx = 0;
 
+/* ============================================================
+   PERSISTANCE LOCALE (localStorage) — ancienneté, sélections de vacances/Jo,
+   semaine et vue courantes. Reste sur cet appareil/navigateur seulement ;
+   silencieux si le stockage est indisponible (navigation privée, quota plein).
+============================================================ */
+const STORAGE_KEY = 'horaire-releve-state-v1';
+function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      weekStart: ymd(WEEKS[weekIndex].start),
+      showReal, viewMode, currentDayIdx, seniorityOrder,
+      vacDays: Array.from(vacDays.entries()),
+      unavailableJo: Array.from(unavailableJo)
+    }));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.weekStart){
+      const idx = WEEKS.findIndex(w=>ymd(w.start)===s.weekStart);
+      if(idx>=0) weekIndex = idx;
+    }
+    if(typeof s.showReal==='boolean') showReal = s.showReal;
+    if(s.viewMode==='grid' || s.viewMode==='day') viewMode = s.viewMode;
+    if(Number.isInteger(s.currentDayIdx) && s.currentDayIdx>=0 && s.currentDayIdx<=6) currentDayIdx = s.currentDayIdx;
+    if(Array.isArray(s.seniorityOrder) && s.seniorityOrder.length===seniorityOrder.length
+       && s.seniorityOrder.every(c=>seniorityOrder.includes(c))){
+      seniorityOrder = s.seniorityOrder;
+    }
+    if(Array.isArray(s.vacDays)) vacDays = new Map(s.vacDays);
+    if(Array.isArray(s.unavailableJo)) unavailableJo = new Set(s.unavailableJo);
+  }catch(e){}
+}
+loadState();
+
 function todayDayIdxInWeek(){
   const w = WEEKS[weekIndex];
   const today = new Date(); today.setHours(0,0,0,0);
@@ -1196,10 +1235,10 @@ function renderSeniorityList(){
         <button data-dir="down" ${idx===seniorityOrder.length-1?'disabled':''} title="Descendre">▼</button>
       </span>`;
     row.querySelector('[data-dir="up"]').onclick = ()=>{
-      if(idx>0){ [seniorityOrder[idx-1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx-1]]; renderSeniorityList(); }
+      if(idx>0){ [seniorityOrder[idx-1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx-1]]; renderSeniorityList(); saveState(); }
     };
     row.querySelector('[data-dir="down"]').onclick = ()=>{
-      if(idx<seniorityOrder.length-1){ [seniorityOrder[idx+1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx+1]]; renderSeniorityList(); }
+      if(idx<seniorityOrder.length-1){ [seniorityOrder[idx+1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx+1]]; renderSeniorityList(); saveState(); }
     };
     list.appendChild(row);
   });
@@ -1215,6 +1254,7 @@ function toggleVacDay(code, dayIdx, w, type){
   simResult = null;
   renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
   document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+  saveState();
 }
 
 /* Un jour est "prenable en congé" pour cet employé seulement s'il y travaille réellement cette
@@ -1266,6 +1306,7 @@ function renderChips(){
       simResult = null;
       renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
       document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+      saveState();
     };
     row.querySelector('[data-mode="conge-all"]').onclick = ()=>{
       const nowAll = workDays.length>0 && workDays.every(i=>vacDays.has(code+'|'+ymd(w.days[i].date)));
@@ -1276,6 +1317,7 @@ function renderChips(){
       simResult = null;
       renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
       document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+      saveState();
     };
     row.querySelectorAll('[data-day]').forEach(btn=>{
       const i = parseInt(btn.dataset.day, 10);
@@ -1297,6 +1339,7 @@ function renderChips(){
       chip.onclick = ()=>{
         if(unavailableJo.has(key)) unavailableJo.delete(key); else unavailableJo.add(key);
         renderChips(); renderTable(); renderJoStat();
+        saveState();
       };
       jChips.appendChild(chip);
     });
@@ -1617,16 +1660,17 @@ function refreshAll(){
   renderSummary();
   renderJoStat();
   renderLadder(simResult ? simResult.filter(a=>a.result.type==='ot'||a.result.type==='reg'||a.result.type==='gap') : []);
+  saveState();
 }
 
 document.getElementById('prevWeek').onclick = ()=>{
   weekIndex = Math.max(0, weekIndex-1);
-  simResult=null; vacDays=new Map(); unavailableJo=new Set(); currentDayIdx=0;
+  simResult=null; currentDayIdx=0;
   refreshAll();
 };
 document.getElementById('nextWeek').onclick = ()=>{
   weekIndex = Math.min(WEEKS.length-1, weekIndex+1);
-  simResult=null; vacDays=new Map(); unavailableJo=new Set(); currentDayIdx=0;
+  simResult=null; currentDayIdx=0;
   refreshAll();
 };
 document.getElementById('gotoNext').onclick = ()=>{
@@ -1637,12 +1681,21 @@ document.getElementById('gotoNext').onclick = ()=>{
   });
   if(idx<0) idx = WEEKS.findIndex(w=> w.start > today);
   weekIndex = idx>=0 ? idx : weekIndex;
-  simResult=null; vacDays=new Map(); unavailableJo=new Set();
+  simResult=null;
   currentDayIdx = todayDayIdxInWeek();
   refreshAll();
 };
 document.getElementById('runSim').onclick = runSimulation;
-document.getElementById('resetSim').onclick = ()=>{
+document.getElementById('resetWeekSim').onclick = ()=>{
+  const w = WEEKS[weekIndex];
+  const weekDates = new Set(w.days.map(d=>ymd(d.date)));
+  Array.from(vacDays.keys()).forEach(key=>{ if(weekDates.has(key.split('|')[1])) vacDays.delete(key); });
+  Array.from(unavailableJo).forEach(key=>{ if(weekDates.has(key.split('|')[1])) unavailableJo.delete(key); });
+  simResult = null;
+  document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
+  refreshAll();
+};
+document.getElementById('resetAllSim').onclick = ()=>{
   vacDays=new Map(); unavailableJo=new Set(); simResult=null;
   document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
   refreshAll();
@@ -1655,6 +1708,7 @@ document.getElementById('realToggle').onclick = ()=>{
   renderDayView();
   renderSummary();
   renderJoStat();
+  saveState();
 };
 
 /* Construit le bloc HTML imprimable (titre + grille) pour une semaine donnée, sans toucher
@@ -1695,6 +1749,7 @@ document.getElementById('viewGridBtn').onclick = ()=>{
   document.getElementById('viewDayBtn').classList.remove('active');
   document.getElementById('gridPanel').style.display='';
   document.getElementById('dayPanel').classList.remove('active');
+  saveState();
 };
 document.getElementById('viewDayBtn').onclick = ()=>{
   viewMode='day';
@@ -1703,18 +1758,29 @@ document.getElementById('viewDayBtn').onclick = ()=>{
   document.getElementById('gridPanel').style.display='none';
   document.getElementById('dayPanel').classList.add('active');
   renderDayView();
+  saveState();
 };
 document.getElementById('prevDay').onclick = ()=>{
   currentDayIdx = (currentDayIdx+6)%7;
   renderDayView();
+  saveState();
 };
 document.getElementById('nextDay').onclick = ()=>{
   currentDayIdx = (currentDayIdx+1)%7;
   renderDayView();
+  saveState();
 };
 
 refreshAll();
-renderSeniorityList();/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
+renderSeniorityList();
+if(viewMode==='day'){
+  document.getElementById('viewDayBtn').classList.add('active');
+  document.getElementById('viewGridBtn').classList.remove('active');
+  document.getElementById('gridPanel').style.display='none';
+  document.getElementById('dayPanel').classList.add('active');
+  renderDayView();
+}
+if(vacatingCodesThisWeek(WEEKS[weekIndex]).length>0) runSimulation();/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
    (icône sur l'écran d'accueil, plein écran, fonctionne même hors-ligne une fois visité). */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
