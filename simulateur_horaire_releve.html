@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur d'horaire — Relève Entretien Windsor</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0e131a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Horaire Relève">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e131a;
+  --panel:#161d27;
+  --panel-2:#1d2632;
+  --panel-3:#242f3d;
+  --line:#2c3949;
+  --text:#eaeef3;
+  --text-dim:#8a97a8;
+  --text-dim2:#5f6c7d;
+  --jour:#e2a13d;
+  --jour-dim:#3a3223;
+  --nuit:#5b93cc;
+  --nuit-dim:#1f2c3a;
+  --jo:#9a8bf0;
+  --jo-dim:#242238;
+  --ok:#4fae7e;
+  --alert:#e0645f;
+  --ot:#f2c14e;
+  --radius:10px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(circle at 15% 0%, #16202c 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, #1a2432 0%, transparent 40%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+  padding:28px 20px 60px;
+  -webkit-tap-highlight-color:transparent;
+}
+.wrap{max-width:1240px;margin:0 auto;}
+
+/* ===== VIEW TOGGLE ===== */
+.view-toggle{
+  display:inline-flex;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:9px;padding:3px;gap:2px;flex:none;
+}
+.view-toggle button{
+  border:none;background:transparent;color:var(--text-dim);
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  padding:8px 14px;border-radius:7px;cursor:pointer;transition:.15s;
+}
+.view-toggle button.active{background:var(--panel-3);color:var(--text);}
+
+/* ===== DAY VIEW (mobile-first stacked cards) ===== */
+.day-view{display:none;}
+.day-view.active{display:block;}
+.day-nav{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:14px 18px;border-bottom:1px solid var(--line);
+}
+.day-nav .day-title{font-family:'Oswald',sans-serif;font-size:17px;text-align:center;flex:1;}
+.day-nav .day-title .sub{display:block;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim);margin-top:2px;letter-spacing:.06em;text-transform:uppercase;}
+.day-cards{padding:14px 18px 18px;display:flex;flex-direction:column;gap:8px;}
+.day-card{
+  display:flex;align-items:center;gap:12px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+}
+.day-card .letter-chip{width:34px;height:34px;font-size:15px;flex:none;}
+.day-card .info{flex:1;min-width:0;}
+.day-card .info .role{font-size:10.5px;color:var(--text-dim2);font-family:'JetBrains Mono',monospace;}
+.day-card .status{text-align:right;flex:none;}
+.day-card .status .hours{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;}
+.day-card .status .tag{display:block;font-size:10px;font-style:italic;color:var(--text-dim);margin-top:2px;max-width:150px;}
+.day-card.j .status .hours{color:var(--jour);}
+.day-card.n .status .hours{color:var(--nuit);}
+.day-card.jo .status .hours{color:var(--jo);}
+.day-card.ot .status .hours{color:var(--ot);}
+.day-card.gap .status .hours{color:var(--alert);}
+.shift.vac{background:rgba(143,165,189,0.12);color:#a9bbd0;border:1px solid rgba(143,165,189,0.35);}
+.shift.conge{background:rgba(154,178,145,0.12);color:#a9cfa0;border:1px solid rgba(154,178,145,0.4);}
+.day-card.conge .status .hours{color:#a9cfa0;}
+.shift.ferie{background:rgba(89,194,166,0.1);color:#59c2a6;border:1px solid rgba(89,194,166,0.4);}
+.shift.eq{background:rgba(88,182,217,0.1);color:#6fc4e8;border:1px solid rgba(88,182,217,0.4);}
+.day-card.vac .status .hours{color:#a9bbd0;}
+.day-card.ferie .status .hours{color:#59c2a6;}
+.day-card.eq .status .hours{color:#6fc4e8;}
+
+.real-banner{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:linear-gradient(120deg,rgba(89,194,166,0.1),rgba(88,182,217,0.08));
+  border:1px solid rgba(89,194,166,0.3);border-radius:var(--radius);
+  padding:12px 16px;margin-bottom:16px;font-size:12.5px;
+}
+.real-banner .badge-src{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.05em;
+  background:rgba(89,194,166,0.18);color:#59c2a6;padding:3px 9px;border-radius:12px;flex:none;
+}
+.real-banner .txt{color:var(--text-dim);flex:1;min-width:200px;}
+.real-banner .txt b{color:var(--text);}
+.real-toggle{
+  font-family:'Oswald',sans-serif;font-size:12.5px;font-weight:500;
+  background:var(--panel-3);border:1px solid var(--line);color:var(--text);
+  padding:8px 14px;border-radius:8px;cursor:pointer;flex:none;transition:.15s;
+}
+.real-toggle.on{background:rgba(89,194,166,0.2);border-color:rgba(89,194,166,0.5);color:#7fd9bd;}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width:680px){
+  body{padding:16px 12px 44px;}
+  header{align-items:flex-start;padding-bottom:16px;margin-bottom:16px;}
+  .brand-text h1{font-size:20px;}
+  .brand-mark{width:38px;height:38px;}
+  .header-meta{text-align:left;font-size:10.5px;width:100%;}
+  .control-bar{padding:12px;gap:10px;}
+  .week-nav{width:100%;justify-content:space-between;}
+  .week-label{min-width:0;flex:1;font-size:14.5px;}
+  .today-btn{flex:1;text-align:center;}
+  .freeze-status{margin-left:0;width:100%;justify-content:center;}
+  .view-toggle{width:100%;justify-content:center;}
+  .legend{gap:10px 14px;font-size:10.5px;}
+  .jo-stat-strip{padding:12px 14px;gap:12px;}
+  .jo-stat-num{font-size:32px;min-width:44px;}
+  .jo-stat-breakdown{margin-left:0;width:100%;}  .panel-head{padding:12px 14px;}
+  .panel-head h2{font-size:12.5px;}
+  .sim-body{padding:14px;gap:16px;}
+  .ladder-wrap{flex-direction:column;padding:14px;}
+  .ladder{width:100%;}
+  table.schedule{min-width:760px;}
+  .summary-table{font-size:11px;}
+  .summary-table th,.summary-table td{padding:8px 8px;}
+}
+@media (max-width:420px){
+  .brand{gap:10px;}
+  .brand-text h1{font-size:18px;}
+  .eyebrow{font-size:9.5px;}
+  .chip-toggle{padding:7px 10px;font-size:12.5px;}
+}
+
+/* ===== HEADER ===== */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  flex-wrap:wrap;
+  gap:18px;
+  border-bottom:1px solid var(--line);
+  padding-bottom:20px;
+  margin-bottom:22px;
+}
+.brand{display:flex;align-items:center;gap:14px;}
+.brand-mark{
+  width:46px;height:46px;border-radius:8px;
+  background:linear-gradient(155deg,var(--jour) 0%, var(--jour) 48%, var(--nuit) 52%, var(--nuit) 100%);
+  position:relative;flex:none;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.06), 0 6px 18px rgba(0,0,0,0.4);
+}
+.brand-mark::after{
+  content:"";position:absolute;inset:9px;border-radius:4px;
+  background:var(--panel);
+}
+.brand-text .eyebrow{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--text-dim2);margin-bottom:3px;
+}
+.brand-text h1{
+  font-family:'Oswald',sans-serif;font-weight:600;
+  font-size:26px;letter-spacing:.01em;margin:0;
+  color:var(--text);
+}
+.brand-text .sub{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
+.header-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11.5px;color:var(--text-dim);
+  text-align:right;line-height:1.7;
+}
+.header-meta b{color:var(--text);font-weight:500;}
+
+/* ===== WEEK CONTROL BAR ===== */
+.control-bar{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;
+}
+.week-nav{display:flex;align-items:center;gap:10px;}
+.nav-btn{
+  width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel-2);color:var(--text);cursor:pointer;
+  font-size:16px;display:flex;align-items:center;justify-content:center;
+  transition:.15s;
+}
+.nav-btn:hover{background:var(--panel-3);border-color:#3a4a5e;}
+.week-label{font-family:'Oswald',sans-serif;font-size:17px;letter-spacing:.02em;min-width:230px;text-align:center;}
+.week-label .num{color:var(--text-dim);font-size:12px;font-family:'JetBrains Mono',monospace;display:block;margin-top:1px;letter-spacing:.08em;}
+.today-btn{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;
+  background:transparent;border:1px solid var(--line);color:var(--text-dim);
+  padding:8px 12px;border-radius:8px;cursor:pointer;transition:.15s;text-transform:uppercase;
+}
+.today-btn:hover{color:var(--text);border-color:#3a4a5e;}
+
+.freeze-status{
+  margin-left:auto;display:flex;align-items:center;gap:9px;
+  font-family:'JetBrains Mono',monospace;font-size:11.5px;
+  padding:7px 14px;border-radius:20px;letter-spacing:.03em;
+}
+.freeze-status.published{background:rgba(79,174,126,0.12);color:var(--ok);border:1px solid rgba(79,174,126,0.3);}
+.freeze-status.pending{background:rgba(226,161,61,0.12);color:var(--jour);border:1px solid rgba(226,161,61,0.3);}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none;}
+.summer-badge{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;
+  background:rgba(226,161,61,0.14);color:var(--jour);border:1px solid rgba(226,161,61,0.35);
+  padding:6px 12px;border-radius:16px;flex:none;
+}
+
+/* ===== JO STAT STRIP (bien visible) ===== */
+.jo-stat-strip{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:linear-gradient(120deg,rgba(154,139,240,0.14),rgba(154,139,240,0.05));
+  border:1px solid rgba(154,139,240,0.35);border-radius:var(--radius);
+  padding:14px 20px;margin-bottom:16px;
+}
+.jo-stat-num{
+  font-family:'Oswald',sans-serif;font-weight:700;font-size:40px;line-height:1;
+  color:var(--jo);flex:none;min-width:60px;text-align:center;
+}
+.jo-stat-text{flex:none;}
+.jo-stat-label{font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--text);}
+.jo-stat-sub{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;margin-top:2px;}
+.jo-stat-breakdown{
+  margin-left:auto;display:flex;gap:10px;flex-wrap:wrap;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);
+}
+.jo-stat-breakdown .jo-pill{
+  background:var(--panel-3);border:1px solid var(--line);border-radius:14px;
+  padding:5px 11px;display:flex;align-items:center;gap:6px;
+}
+.jo-stat-breakdown .jo-pill b{color:var(--jo);font-family:'Oswald',sans-serif;font-size:13px;}
+
+/* ===== LEGEND ===== */
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--text-dim);margin-bottom:14px;padding:0 2px;}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.swatch{width:11px;height:11px;border-radius:3px;flex:none;}
+
+/* ===== SCHEDULE GRID ===== */
+.panel{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  margin-bottom:18px;overflow:hidden;
+}
+.panel-head{
+  padding:14px 18px;border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+}
+.panel-head h2{
+  font-family:'Oswald',sans-serif;font-weight:500;font-size:14.5px;
+  letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--text-dim);
+}
+.panel-head h2 b{color:var(--text);}
+
+.print-btn{
+  font-family:'Oswald',sans-serif;font-size:13px;font-weight:600;letter-spacing:.02em;
+  background:linear-gradient(120deg,#e2a13d,#d98a3d);
+  border:none;color:#211505;
+  padding:9px 16px;border-radius:8px;cursor:pointer;transition:.15s;white-space:nowrap;
+  box-shadow:0 2px 8px rgba(226,161,61,0.35);
+}
+.print-btn:hover{filter:brightness(1.08);box-shadow:0 3px 10px rgba(226,161,61,0.45);}
+.print-btn.print-btn-secondary{
+  background:var(--panel-3);border:1px solid rgba(226,161,61,0.4);color:var(--jour);
+  box-shadow:none;font-weight:500;
+}
+.print-btn.print-btn-secondary:hover{background:var(--panel-2);filter:none;box-shadow:none;border-color:var(--jour);}
+.print-only-header{display:none;}
+.print-only-header .pt{font-family:'Oswald',sans-serif;font-weight:700;font-size:20px;color:var(--text);}
+.print-only-header .ps{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);margin-top:2px;}
+
+.grid-scroll{overflow-x:auto;}
+table.schedule{border-collapse:collapse;width:100%;min-width:860px;}
+table.schedule th, table.schedule td{
+  border-bottom:1px solid var(--line);
+  padding:10px 6px;text-align:center;vertical-align:middle;
+}
+table.schedule thead th{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;
+  color:var(--text-dim2);text-transform:uppercase;font-weight:500;
+  background:var(--panel-2);padding:9px 6px 8px;
+}
+table.schedule thead th .daynum{display:block;font-size:14px;color:var(--text-dim);margin-top:3px;font-family:'Oswald',sans-serif;}
+table.schedule thead th.weekend-col{color:#c9b184;}
+th.emp-col, td.emp-col{
+  text-align:left;padding-left:16px;width:150px;position:sticky;left:0;
+  background:var(--panel);z-index:2;border-right:1px solid var(--line);
+}
+tr:hover td{background:rgba(255,255,255,0.015);}
+tr:hover td.emp-col{background:#1a222d;}
+.emp-badge{
+  display:inline-flex;align-items:center;gap:9px;font-family:'Oswald',sans-serif;font-size:15px;
+}
+.letter-chip{
+  width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  font-weight:600;font-size:13px;flex:none;background:var(--panel-3);color:var(--text);
+  border:1px solid var(--line);
+}
+.emp-role{font-size:10px;color:var(--text-dim2);font-family:'JetBrains Mono',monospace;letter-spacing:.03em;}
+
+.shift-cell{min-width:108px;}
+.shift{
+  display:inline-block;border-radius:7px;padding:6px 4px;font-family:'JetBrains Mono',monospace;
+  font-size:10.8px;line-height:1.5;font-weight:500;position:relative;
+}
+.shift.j{background:var(--jour-dim);color:var(--jour);border:1px solid rgba(226,161,61,0.28);}
+.shift.n{background:var(--nuit-dim);color:var(--nuit);border:1px solid rgba(91,147,204,0.32);}
+.shift.jo{background:rgba(154,139,240,0.09);color:var(--jo);border:1px dashed rgba(154,139,240,0.35);}
+.shift.off{color:var(--text-dim2);font-size:10.5px;}
+.shift.ot{background:rgba(242,193,78,0.1);color:var(--ot);border:1px solid rgba(242,193,78,0.45);}
+.shift.gap{background:rgba(224,100,95,0.1);color:var(--alert);border:1px solid rgba(224,100,95,0.4);}
+.shift .tag{display:block;font-style:italic;font-size:9.3px;opacity:.85;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;}
+
+/* ===== SIMULATOR ===== */
+.sim-body{padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+@media (max-width:880px){.sim-body{grid-template-columns:1fr;}}
+.field-group{margin-bottom:16px;}
+.field-group label.title{
+  display:block;font-family:'JetBrains Mono',monospace;font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);margin-bottom:9px;
+}
+.chip-row{display:flex;gap:8px;flex-wrap:wrap;}
+.chip-toggle{
+  display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel-2);cursor:pointer;
+  font-family:'Oswald',sans-serif;font-size:13.5px;color:var(--text-dim);transition:.15s;user-select:none;
+}
+.chip-toggle:hover{border-color:#3a4a5e;}
+.chip-toggle.active{background:rgba(224,100,95,0.14);border-color:rgba(224,100,95,0.5);color:#f0908c;}
+.chip-toggle .mini-chip{width:18px;height:18px;border-radius:5px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;}
+.chip-toggle.jo-toggle.active{background:rgba(154,139,240,0.14);border-color:rgba(154,139,240,0.5);color:#c3b6f5;}
+
+.vac-row{
+  display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);
+  flex-wrap:wrap;
+}
+.vac-row:last-child{border-bottom:none;}
+.vac-row .letter-chip{width:24px;height:24px;font-size:11px;flex:none;}
+.vac-row .vac-name{
+  font-family:'Oswald',sans-serif;font-size:12.5px;color:var(--text-dim);
+  width:78px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.vac-day-btns{display:flex;gap:3px;flex:1;flex-wrap:wrap;}
+.vac-day-btn{
+  width:26px;height:26px;border-radius:6px;border:1px solid var(--line);
+  background:var(--panel-2);color:var(--text-dim2);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;
+  display:flex;align-items:center;justify-content:center;transition:.15s;flex:none;
+}
+.vac-day-btn:hover{border-color:#3a4a5e;color:var(--text-dim);}
+.vac-day-btn.active{background:rgba(143,165,189,0.18);border-color:#8fa5bd;color:#c6d2df;}
+.vac-week-btn{
+  font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.03em;
+  background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim2);
+  padding:5px 9px;border-radius:6px;cursor:pointer;flex:none;white-space:nowrap;
+}
+.vac-week-btn:hover{color:var(--text-dim);border-color:#3a4a5e;}
+.vac-week-btn.active{background:rgba(154,178,145,0.18);border-color:#9abf91;color:#c9e0c1;}
+.vac-week-btn.vac-btn-vac.active{background:rgba(143,165,189,0.18);border-color:#8fa5bd;color:#c6d2df;}
+
+.shift-cell.toggle-vac{cursor:pointer;}
+.shift-cell.toggle-vac:hover .shift{outline:1px dashed var(--text-dim2);outline-offset:1px;}
+.day-card.toggle-vac{cursor:pointer;}
+.day-card.toggle-vac:hover{outline:1px dashed var(--text-dim2);outline-offset:-1px;}
+
+.run-btn{
+  width:100%;padding:13px;border-radius:9px;border:none;cursor:pointer;
+  background:linear-gradient(120deg,#e2a13d,#d98a3d);
+  color:#211505;font-family:'Oswald',sans-serif;font-weight:600;font-size:14.5px;
+  letter-spacing:.03em;transition:.15s;margin-top:6px;
+}
+.run-btn:hover{filter:brightness(1.08);}
+.reset-btn{
+  width:100%;padding:10px;border-radius:9px;border:1px solid var(--line);
+  background:transparent;cursor:pointer;color:var(--text-dim);font-family:'Inter',sans-serif;
+  font-size:12.5px;margin-top:8px;
+}
+.reset-btn:hover{color:var(--text);border-color:#3a4a5e;}
+
+.result-box{
+  background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:16px;
+  font-size:13px;line-height:1.65;min-height:120px;
+}
+.result-box .placeholder{color:var(--text-dim2);font-style:italic;font-size:12.5px;}
+.result-box h3{
+  font-family:'Oswald',sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-dim);margin:0 0 10px;
+}
+.rule-tag{
+  display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;
+  background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim);
+  padding:2px 8px;border-radius:12px;margin-bottom:10px;
+}
+.sim-stats{
+  display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap;
+}
+.sim-stat{
+  flex:1;min-width:100px;background:var(--panel-3);border:1px solid var(--line);
+  border-radius:8px;padding:10px 12px;text-align:center;
+}
+.sim-stat-num{
+  display:block;font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;
+  color:var(--jo);line-height:1.1;
+}
+.sim-stat-label{
+  display:block;font-family:'JetBrains Mono',monospace;font-size:9px;
+  color:var(--text-dim2);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;
+}
+.sim-stat-warn .sim-stat-num{color:var(--alert);}
+.result-line{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);}
+.result-line:last-child{border-bottom:none;}
+.result-line .day{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);}
+.result-line .action{font-size:12.5px;text-align:right;}
+.result-line .action b{color:var(--jour);}
+.result-line .action b.ot{color:var(--ot);}
+.result-line .action b.reg{color:var(--nuit);}
+.result-line .action b.alert{color:var(--alert);}
+
+/* ===== LADDER (signature element) ===== */
+.ladder-wrap{
+  display:flex;gap:16px;align-items:stretch;padding:16px 18px 18px;
+}
+.ladder-intro{flex:1;min-width:220px;}
+.ladder-intro p{font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:6px 0 0;}
+.ladder{
+  flex:none;width:290px;display:flex;flex-direction:column-reverse;gap:3px;
+}
+.rung{
+  display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:10px;
+  padding:6px 10px;border-radius:6px;font-size:11px;
+  background:var(--panel-2);border:1px solid transparent;color:var(--text-dim2);
+  transition:.2s;
+}
+.rung .rk{font-family:'JetBrains Mono',monospace;font-size:10px;text-align:center;color:var(--text-dim2);}
+.rung .desc{font-family:'Inter',sans-serif;}
+.rung .badge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;border-radius:8px;visibility:hidden;}
+.rung.active-ot{background:rgba(242,193,78,0.14);border-color:rgba(242,193,78,0.5);color:var(--ot);}
+.rung.active-ot .badge{visibility:visible;background:rgba(242,193,78,0.25);color:var(--ot);}
+.rung.active-reg{background:rgba(91,147,204,0.12);border-color:rgba(91,147,204,0.45);color:var(--nuit);}
+.rung.active-reg .badge{visibility:visible;background:rgba(91,147,204,0.25);color:var(--nuit);}
+
+/* ===== SUMMARY ===== */
+.summary-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.summary-table th,.summary-table td{padding:9px 14px;text-align:center;border-bottom:1px solid var(--line);}
+.summary-table th{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim2);text-align:center;}
+.summary-table td:first-child, .summary-table th:first-child{text-align:left;padding-left:18px;}
+
+.seniority-row{
+  display:flex;align-items:center;gap:10px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+}
+.seniority-row .rank-num{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim2);
+  width:20px;flex:none;text-align:center;
+}
+.seniority-row .letter-chip{width:26px;height:26px;font-size:12px;flex:none;}
+.seniority-row .sname{flex:1;font-family:'Oswald',sans-serif;font-size:13.5px;min-width:0;}
+.seniority-row .sname .sub{display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim2);}
+.seniority-row .move-btns{display:flex;gap:4px;flex:none;}
+.seniority-row .move-btns button{
+  width:26px;height:26px;border-radius:6px;border:1px solid var(--line);
+  background:var(--panel-3);color:var(--text-dim);cursor:pointer;font-size:12px;
+  display:flex;align-items:center;justify-content:center;transition:.15s;
+}
+.seniority-row .move-btns button:hover:not(:disabled){color:var(--text);border-color:#3a4a5e;}
+.seniority-row .move-btns button:disabled{opacity:.3;cursor:default;}
+
+footer{margin-top:26px;text-align:center;font-size:11px;color:var(--text-dim2);font-family:'JetBrains Mono',monospace;line-height:1.8;}
+footer a{color:var(--text-dim);}
+
+/* ===== IMPRESSION — grille horaire, paysage, fond clair, une ou plusieurs semaines ===== */
+#printRoot{ display:none; }
+@media print{
+  @page{ size: legal landscape; margin: 10mm; }
+  html, body{
+    background:#ffffff !important; margin:0; padding:0;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;
+  }
+  /* On masque tout le contenu normal de l'appli et on n'affiche que la zone d'impression,
+     générée dynamiquement — évite les pages blanches (aucun contenu caché ne conserve d'espace). */
+  body.printing-grid .wrap{ display:none !important; }
+  body.printing-grid #printRoot{ display:block !important; }
+
+  .print-week-block{
+    background:#fff; color:#1a1f27;
+    page-break-after: always; break-after: page;
+  }
+  .print-week-block:last-child{ page-break-after: auto; break-after: auto; }
+
+  .print-only-header{ display:block; margin-bottom:10px; }
+  .print-only-header .pt{ font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; color:#1a1f27; }
+  .print-only-header .ps{ font-family:'JetBrains Mono',monospace; font-size:11px; color:#5a6472; margin-top:2px; }
+
+  .print-week-block table.schedule{ width:100%; min-width:0; border-collapse:collapse; }
+  .print-week-block table.schedule th, .print-week-block table.schedule td{
+    border:1px solid #cfd6de; padding:6px 4px; color:#1a1f27;
+  }
+  .print-week-block table.schedule thead th{
+    background:#eef1f5 !important; color:#3a4452; font-family:'JetBrains Mono',monospace;
+    font-size:10px; text-transform:uppercase;
+  }
+  .print-week-block thead th .daynum{ color:#1a1f27; font-family:'Oswald',sans-serif; }
+  .print-week-block td.emp-col, .print-week-block th.emp-col{
+    background:#f7f9fb !important; text-align:left; padding-left:10px; position:static;
+  }
+  .print-week-block .emp-role{ color:#7a8593; }
+
+  .print-week-block .shift{ border-width:1px; border-radius:5px; padding:4px 2px; font-size:9.5px; line-height:1.25; overflow:hidden; }
+  .print-week-block .shift .tag{
+    font-size:8px; display:block; line-height:1.2;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+  }
+  .print-week-block table.schedule th, .print-week-block table.schedule td{ padding:5px 2px; }
+  .print-week-block .shift.j{ background:#f0ab2e !important; color:#2a1c00; border-color:#b5790f; font-weight:600; }
+  .print-week-block .shift.n{ background:#3f76ad !important; color:#ffffff; border-color:#28517a; font-weight:600; }
+  .print-week-block .shift.jo{ background:#8266dd !important; color:#ffffff; border-color:#5c449e; font-weight:600; }
+  .print-week-block .shift.ot{ background:#e0b93a !important; color:#2a1c00; border-color:#a3860f; font-weight:600; }
+  .print-week-block .shift.vac{ background:#6d7f92 !important; color:#ffffff; border-color:#4d5b69; font-weight:600; }
+  .print-week-block .shift.conge{ background:#5f9e51 !important; color:#ffffff; border-color:#3f6f35; font-weight:600; }
+  .print-week-block .shift.gap{ background:#d64c3f !important; color:#ffffff; border-color:#a3352b; font-weight:600; }
+  .print-week-block .shift.reg{ background:#3f76ad !important; color:#ffffff; border-color:#28517a; font-weight:600; }
+  .print-week-block .shift.off{ color:#8a939e; border:none; background:none; }
+  .print-week-block .shift .tag{ color:inherit; opacity:.8; }
+  .print-week-block .letter-chip{ background:#eef1f5 !important; color:#1a1f27; border:1px solid #cfd6de; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-text">
+        <div class="eyebrow">Entretien — Mécanique / Électro-instrumentation</div>
+        <h1>Simulateur d'horaire de relève</h1>
+        <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
+      </div>
+    </div>
+    <div class="header-meta">
+      Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
+      Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
+    </div>
+  </header>
+
+  <div class="control-bar">
+    <div class="week-nav">
+      <button class="nav-btn" id="prevWeek">‹</button>
+      <div class="week-label">
+        <span id="weekRange">—</span>
+        <span class="num" id="weekNum">SEM —</span>
+      </div>
+      <button class="nav-btn" id="nextWeek">›</button>
+    </div>
+    <button class="today-btn" id="gotoNext">→ Semaine prochaine</button>
+    <div class="view-toggle">
+      <button id="viewGridBtn" class="active">Grille</button>
+      <button id="viewDayBtn">Jour</button>
+    </div>
+    <span class="summer-badge" id="summerBadge" style="display:none;">☀ Période estivale</span>
+    <div class="freeze-status" id="freezeStatus">
+      <span class="dot"></span><span id="freezeText">—</span>
+    </div>
+  </div>
+
+  <div class="jo-stat-strip">
+    <div class="jo-stat-num" id="joStatNum">—</div>
+    <div class="jo-stat-text">
+      <div class="jo-stat-label">JO disponibles cette semaine</div>
+      <div class="jo-stat-sub" id="joStatSub">Réservistes E · F · G</div>
+    </div>
+    <div class="jo-stat-breakdown" id="joStatBreakdown"></div>
+  </div>
+
+  <div class="real-banner" id="realBanner" style="display:none;">
+    <span class="badge-src">Source : Instru_20260809au20260815.pdf — DomtarPROD</span>
+    <span class="txt">Horaire réellement <b>publié</b> pour cette semaine (Roy, Luc — exécuté le 05/08/2026 14:38), avec vacances, congés-fériés et comblement déjà appliqués (surtemps + renfort de jour).</span>
+    <button class="real-toggle on" id="realToggle">Horaire publié (réel)</button>
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--jour)"></span> Quart jour (7h–19h) · titulaire</span>
+    <span><span class="swatch" style="background:var(--nuit)"></span> Quart nuit (19h–7h) · titulaire</span>
+    <span><span class="swatch" style="background:var(--jo);opacity:.6"></span> Réserviste (E·F·G) disponible</span>
+    <span><span class="swatch" style="background:var(--ot)"></span> Surtemps (WI ENT TSP)</span>
+    <span><span class="swatch" style="background:#59c2a6"></span> Congés-Fériés</span>
+    <span><span class="swatch" style="background:#a9bbd0"></span> Vacances</span>
+    <span><span class="swatch" style="background:#a9cfa0"></span> Congé</span>
+    <span><span class="swatch" style="background:#6fc4e8"></span> Renfort de jour (EQ RELEVE)</span>
+    <span><span class="swatch" style="background:var(--alert)"></span> Quart non couvert</span>
+  </div>
+
+  <!-- ===== HORAIRE PRINCIPAL — VUE GRILLE ===== -->
+  <div class="panel" id="gridPanel">
+    <div class="panel-head">
+      <h2>Horaire de la semaine — <b>horaire maître ABCDG</b></h2>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <h2 style="font-size:11px;">Source : 2026_ABCDG.pdf</h2>
+        <button class="print-btn" id="printGridBtn" title="Imprimer la grille de cette semaine (paysage, couleur)">🖶 Imprimer</button>
+        <button class="print-btn print-btn-secondary" id="print4WeeksBtn" title="Imprimer cette semaine et les 3 suivantes (une par page)">🖶 Imprimer 4 semaines</button>
+      </div>
+    </div>
+    <div class="grid-scroll">
+      <table class="schedule" id="scheduleTable">
+        <thead><tr id="headRow"></tr></thead>
+        <tbody id="bodyRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== HORAIRE PRINCIPAL — VUE JOUR (mobile) ===== -->
+  <div class="panel day-view" id="dayPanel">
+    <div class="day-nav">
+      <button class="nav-btn" id="prevDay">‹</button>
+      <div class="day-title" id="dayTitle">—<span class="sub" id="daySub">—</span></div>
+      <button class="nav-btn" id="nextDay">›</button>
+    </div>
+    <div class="day-cards" id="dayCards"></div>
+  </div>
+
+  <!-- ===== SIMULATEUR DE COMBLEMENT ===== -->
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Simulateur de comblement — <b>vacances / absences</b></h2>
+      <h2 style="font-size:11px;">Réf. art. 8.01 · Procédure pt. 3, 9 · Politique employeur (vacances simultanées)</h2>
+    </div>
+    <div class="sim-body">
+      <div>
+        <div class="field-group">
+          <label class="title">Vacances — cliquez les jours précis (ou « Toute la semaine »)</label>
+          <div id="vacDayPicker"></div>
+        </div>
+        <div class="field-group">
+          <label class="title">Réservistes (E·F·G) — indisponibilité ponctuelle (jour précis, hors vacances)</label>
+          <div class="chip-row" id="joChips"></div>
+          <p style="font-size:11px;color:var(--text-dim2);margin:8px 2px 0;line-height:1.5;">
+            Le nombre de JO disponibles par semaine correspond normalement au nombre de journées de congé accordées cette semaine-là — sauf durant les <b>semaines doubles</b> de la période estivale, où cette correspondance ne s'applique pas.
+          </p>
+        </div>
+        <button class="run-btn" id="runSim">Simuler le comblement</button>
+        <button class="reset-btn" id="resetSim">Réinitialiser la simulation</button>
+      </div>
+      <div class="result-box" id="resultBox">
+        <div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation. Le moteur applique l'ordre de comblement (Jo en commençant par la lettre E) et, en cas de vacances simultanées créant jusqu'à 4 quarts non couverts, la règle des pires quarts (max. 2 quarts en surtemps, le reste cédulé à un employé de jour à temps régulier).</div>
+      </div>
+    </div>
+
+    <div class="ladder-wrap" style="border-top:1px solid var(--line);">
+      <div class="ladder-intro">
+        <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0;">Échelle des pires quarts</h2>
+        <p>Classement du moins pire (bas) au plus pire (haut), utilisé pour prioriser l'offre de surtemps lorsque 2 titulaires sont en vacances simultanément. Les rangs s'allument selon les quarts non couverts détectés par la simulation.</p>
+      </div>
+      <div class="ladder" id="ladder"></div>
+    </div>
+
+    <div class="seniority-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
+      <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Paramètres — Ordre d'ancienneté (surtemps)</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">La lettre (A à G) ne reflète pas l'ancienneté réelle — ce n'est qu'une position sur l'horaire maître. Classez ici l'ordre d'ancienneté du plus ancien (haut) au plus jeune (bas) : c'est cet ordre, et non l'ordre E-F-G, qui détermine qui se voit offrir les 2 quarts de surtemps.</p>
+      <div id="seniorityList" style="display:flex;flex-direction:column;gap:6px;max-width:420px;"></div>
+    </div>
+  </div>
+
+  <!-- ===== RÉSUMÉ ===== -->
+  <div class="panel">
+    <div class="panel-head"><h2>Résumé de la semaine</h2></div>
+    <table class="summary-table">
+      <thead><tr><th>Employé</th><th>Quarts J</th><th>Quarts N</th><th>Total 12h</th><th>Fin de semaine</th><th>Statut horaire</th></tr></thead>
+      <tbody id="summaryBody"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    SIMULATEUR INTERNE — À TITRE D'AIDE À LA PLANIFICATION UNIQUEMENT · NE REMPLACE PAS LA CONVENTION COLLECTIVE 2022-2026<br>
+    Horaire de base : horaire maître ABCDG (2026_ABCDG.pdf) — disponibilité des réservistes E/F/G éditable manuellement (donnée source non structurée)
+  </footer>
+</div>
+
+<div id="printRoot"></div>
+
+<script>
+/* ============================================================
+   DONNÉES — Horaire maître ABCDG (source : 2026_ABCDG.pdf)
+   Chaque semaine : date de début (dimanche), chaîne J (7 lettres, dim→sam),
+   chaîne N (7 lettres, dim→sam)
+============================================================ */
+const RAW_WEEKS = [
+["2025-12-28","CAADDBB","DBBCCAA"],["2026-01-04","BCCAADD","ADDBBCC"],
+["2026-01-11","DBBCCAA","CGGDDBB"],["2026-01-18","AGGBBCC","BCCAADD"],
+["2026-01-25","CAADDBB","DGGCCAA"],["2026-02-01","BGGAADD","ADDBBCC"],
+["2026-02-08","DBBCCAA","CAADDBB"],["2026-02-15","ADDBBCC","BCCAADD"],
+["2026-02-22","CGGDDBB","DBBCCAA"],["2026-03-01","BCCAADD","AGGBBCC"],
+["2026-03-08","DGGCCAA","CAADDBB"],["2026-03-15","ADDBBCC","BGGAADD"],
+["2026-03-22","CGGDDBB","DBBCCAA"],["2026-03-29","BCCAADD","AGGBBCC"],
+["2026-04-05","DGGCCAA","CAADDBB"],["2026-04-12","ADDBBCC","BGGAADD"],
+["2026-04-19","CAADDBB","DBBCCAA"],["2026-04-26","BCCAADD","ADDBBCC"],
+["2026-05-03","DBBCCAA","CGGDDBB"],["2026-05-10","AGGBBCC","BCCAADD"],
+["2026-05-17","CAADDBB","DGGCCAA"],["2026-05-24","BGGAADD","ADDBBCC"],
+["2026-05-31","DBBCCAA","CGGDDBB"],["2026-06-07","AGGBBCC","BCCAADD"],
+["2026-06-14","CAADDBB","DGGCCAA"],["2026-06-21","BGGAADD","ADDBBCC"],
+["2026-06-28","DBBCCAA","CAADDBB"],["2026-07-05","ADDBBCC","BCCAADD"],
+["2026-07-12","CGGDDBB","DBBCCAA"],["2026-07-19","BCCAADD","AGGBBCC"],
+["2026-07-26","DGGCCAA","CAADDBB"],["2026-08-02","ADDBBCC","BGGAADD"],
+["2026-08-09","CGGDDBB","DBBCCAA"],["2026-08-16","BCCAADD","AGGBBCC"],
+["2026-08-23","DGGCCAA","CAADDBB"],["2026-08-30","ADDBBCC","BGGAADD"],
+["2026-09-06","CAADDBB","DBBCCAA"],["2026-09-13","BCCAADD","ADDBBCC"],
+["2026-09-20","DBBCCAA","CGGDDBB"],["2026-09-27","AGGBBCC","BCCAADD"],
+["2026-10-04","CAADDBB","DGGCCAA"],["2026-10-11","BGGAADD","ADDBBCC"],
+["2026-10-18","DBBCCAA","CAADDBB"],["2026-10-25","ADDBBCC","BCCAADD"],
+["2026-11-01","CGGDDBB","DBBCCAA"],["2026-11-08","BCCAADD","AGGBBCC"],
+["2026-11-15","DGGCCAA","CAADDBB"],["2026-11-22","ADDBBCC","BGGAADD"],
+["2026-11-29","CGGDDBB","DBBCCAA"],["2026-12-06","BCCAADD","AGGBBCC"],
+["2026-12-13","DGGCCAA","CAADDBB"],["2026-12-20","ADDBBCC","BGGAADD"],
+["2026-12-27","CAADDBB","DBBCCAA"],["2027-01-03","BCCAADD","ADDBBCC"],
+["2027-01-10","DBBCCAA","CGGDDBB"],["2027-01-17","AGGBBCC","BCCAADD"]
+];
+
+const DAY_LABELS = ["dim.","lun.","mar.","mer.","jeu.","ven.","sam."];
+const EMPLOYEES = [
+  {code:"A", role:"Titulaire"}, {code:"B", role:"Titulaire"},
+  {code:"C", role:"Titulaire"}, {code:"D", role:"Titulaire"},
+  {code:"G", role:"Titulaire 0,5 + Jo"},
+  {code:"E", role:"Réserviste (Jo)"}, {code:"F", role:"Réserviste (Jo)"},
+  {code:"X", role:"Renfort de jour (au besoin)"}
+];
+const REAL_NAMES = {
+  A:"Beaudette, Thierry", B:"Spooner, Alain", C:"Bruneau, David",
+  D:"Roy, François", G:"Desrochers, Carl", F:"Lachance, Loïc",
+  E:"Lapierre, Frédéric", X:"Bonenfant, Alexis"
+};
+
+/* Ordre d'ancienneté de métier (du plus ancien au plus jeune) — utilisé pour l'offre de surtemps.
+   Modifiable directement dans l'outil (section « Paramètres — Ancienneté ») : la lettre ABCDG
+   ne reflète PAS l'ancienneté, ce n'est qu'un ordre de position sur l'horaire maître. */
+let seniorityOrder = ['A','B','C','D','E','F','G'];
+
+/* ============================================================
+   HORAIRE MAÎTRE JO (E·F·G) — RÉEL, transcrit depuis 2026_Horaire_JO_MECELECINSTRU.pdf
+   Retranscrit avec alignement pixel-exact du quadrillage (colonnes/lignes détectées par analyse
+   d'image) et header D-L-M-M-J-V-S confirmé tel qu'imprimé (dim→sam) ; les valeurs ci-dessous
+   sont déjà réalignées sur le repère standard utilisé partout ailleurs dans l'outil.
+     o = JO (disponible/réserve)   .  = repos (case vide, hors horaire)
+     j = quart jour fixe 7h-19h    n  = quart nuit fixe 19h-7h
+   Vérifié sur les 53 semaines : total (E+F+G) toujours 7 ou 8 JO/semaine ; jamais de JO le
+   samedi ni le dimanche (toujours lun-ven) ; les jours "j/n" de G concordent exactement avec
+   ABCDG (0 divergence). G a 1 JO (semaine avec quart ABCDG) ou 3 JO (semaine libre d'ABCDG)
+   — SAUF le 13/12/2026, confirmé à l'identique par zoom extrême à répétition : 2 JO ce
+   jour-là (exception réelle du document, pas une erreur de lecture).
+   Semaines hors de cette table (avant 2025-12-28 ou après 2026-12-27) : pas de donnée source,
+   comblement par défaut (JO tous les jours, capé à l'usage par le maximum de 4/semaine si édité).
+============================================================ */
+const REAL_JO_DEFAULT = {
+  "2025-12-28":{E:".oo....",F:"...ooo.",G:".ooo..."},
+  "2026-01-04":{E:"..ooo..",F:".oo....",G:".ooo..."},
+  "2026-01-11":{E:".oooo..",F:"...ooo.",G:".nn.o.."},
+  "2026-01-18":{E:"..ooo..",F:".oooo..",G:".jjo..."},
+  "2026-01-25":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
+  "2026-02-01":{E:"..oooo.",F:".ooo...",G:".jjo..."},
+  "2026-02-08":{E:".oo....",F:"...ooo.",G:".ooo..."},
+  "2026-02-15":{E:"..ooo..",F:".oo....",G:".ooo..."},
+  "2026-02-22":{E:".oooo..",F:"...ooo.",G:".jjo..."},
+  "2026-03-01":{E:"..ooo..",F:".oooo..",G:".nn.o.."},
+  "2026-03-08":{E:".ooo...",F:"...ooo.",G:".jjo..."},
+  "2026-03-15":{E:".oooo..",F:".ooo...",G:".nn..o."},
+  "2026-03-22":{E:".ooo...",F:"..oooo.",G:".jjo..."},
+  "2026-03-29":{E:"..ooo..",F:".ooo...",G:".nn..o."},
+  "2026-04-05":{E:".ooo...",F:"...ooo.",G:".jjo..."},
+  "2026-04-12":{E:"..ooo..",F:".ooo...",G:".nn..o."},
+  "2026-04-19":{E:".oo....",F:"...ooo.",G:".ooo..."},
+  "2026-04-26":{E:"..ooo..",F:".oo....",G:".ooo..."},
+  "2026-05-03":{E:".oooo..",F:"...ooo.",G:".nn.o.."},
+  "2026-05-10":{E:"..ooo..",F:".oooo..",G:".jjo..."},
+  "2026-05-17":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
+  "2026-05-24":{E:"..oooo.",F:".ooo...",G:".jjo..."},
+  "2026-05-31":{E:".ooo...",F:"..oooo.",G:".nn.o.."},
+  "2026-06-07":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
+  "2026-06-14":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
+  "2026-06-21":{E:"..ooo..",F:".oooo..",G:".jjo..."},
+  "2026-06-28":{E:".oo....",F:"...ooo.",G:".ooo..."},
+  "2026-07-05":{E:"..ooo..",F:".oo....",G:".ooo..."},
+  "2026-07-12":{E:".oooo..",F:"...ooo.",G:".jjo..."},
+  "2026-07-19":{E:"..ooo..",F:".oooo..",G:".nn.o.."},
+  "2026-07-26":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
+  "2026-08-02":{E:".oooo..",F:"..ooo..",G:".nn.o.."},
+  "2026-08-09":{E:".ooo...",F:"..oooo.",G:".jjo..."},
+  "2026-08-16":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
+  "2026-08-23":{E:".ooo...",F:"..oooo.",G:".nn.o.."},
+  "2026-08-30":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
+  "2026-09-06":{E:".oo....",F:"...ooo.",G:".ooo..."},
+  "2026-09-13":{E:"..ooo..",F:".oo....",G:".ooo..."},
+  "2026-09-20":{E:".oooo..",F:"...ooo.",G:".nn.o.."},
+  "2026-09-27":{E:"..ooo..",F:".oooo..",G:".jjo..."},
+  "2026-10-04":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
+  "2026-10-11":{E:"..oooo.",F:".ooo...",G:".jjo..."},
+  "2026-10-18":{E:".oo....",F:"...ooo.",G:".ooo..."},
+  "2026-10-25":{E:"..ooo..",F:".oo....",G:".ooo..."},
+  "2026-11-01":{E:".oooo..",F:"...ooo.",G:".jjo..."},
+  "2026-11-08":{E:"..ooo..",F:".oooo..",G:".nn.o.."},
+  "2026-11-15":{E:".ooo...",F:"...ooo.",G:".jjo..."},
+  "2026-11-22":{E:"..oooo.",F:".ooo...",G:".nn.o.."},
+  "2026-11-29":{E:".ooo...",F:"..oooo.",G:".jjo..."},
+  "2026-12-06":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
+  "2026-12-13":{E:".ooo...",F:"...ooo.",G:".jjoo.."},
+  "2026-12-20":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
+  "2026-12-27":{E:".oo....",F:"...ooo.",G:".ooo..."}
+};
+
+/* ============================================================
+   HORAIRE RÉELLEMENT PUBLIÉ — semaine du 09/08/2026 au 15/08/2026
+   Source : Instru_20260809au20260815.pdf (export DomtarPROD, imprimé pour Roy, Luc)
+   Index jour : 0=dim 1=lun 2=mar 3=mer 4=jeu 5=ven 6=sam
+============================================================ */
+const REAL_WEEK_START = "2026-08-09";
+const REAL_WEEK_CELLS = {
+  "A|0":{cls:"vac",hours:"WI Semaine",tag:"Vacances 07:00"},
+  "A|1":{cls:"vac",hours:"WI Semaine",tag:"Vacances 07:00"},
+  "A|2":{cls:"vac",hours:"WI Semaine",tag:"Vacances 07:00"},
+  "A|3":{cls:"vac",hours:"WI Semaine",tag:"Vacances 07:00"},
+  "A|4":{cls:"vac",hours:"WI Semaine",tag:"Vacances 07:00"},
+  "A|5":{cls:"vac",hours:"WI Semaine",tag:"Vacances 12:00"},
+  "A|6":{cls:"vac",hours:"WI Semaine",tag:"Vacances 12:00"},
+
+  "C|0":{cls:"ferie",hours:"Congés-Fériés",tag:"12:00"},
+  "C|3":{cls:"ferie",hours:"Congés-Fériés",tag:"12:00"},
+  "C|4":{cls:"ferie",hours:"Congés-Fériés",tag:"12:00"},
+
+  "D|0":{cls:"n",hours:"19:00–7:00",tag:null},
+  "D|2":{cls:"ot",hours:"7:30–16:20",tag:"MACH ELEC-INSTR/ELEC INSTR MACH · WI ENT TSP"},
+  "D|3":{cls:"ferie",hours:"Congés-Fériés",tag:"12:00"},
+  "D|4":{cls:"ferie",hours:"Congés-Fériés",tag:"12:00"},
+
+  "G|1":{cls:"j",hours:"7:00–19:00",tag:null},
+  "G|2":{cls:"j",hours:"7:00–19:00",tag:null},
+  "G|3":{cls:"ferie",hours:"Congés-Fériés",tag:"12:00"},
+  "G|4":{cls:"ot",hours:"7:00–19:00",tag:"WI ENT TSP"},
+  "G|5":{cls:"ot",hours:"7:30–16:20",tag:"WI ENT TSP"},
+
+  "F|0":{cls:"jo",hours:"7:00–19:00",tag:null},
+  "F|4":{cls:"jo",hours:"19:00–7:00",tag:null},
+  "F|5":{cls:"jo",hours:"19:00–7:00",tag:null},
+  "F|6":{cls:"jo",hours:"19:00–7:00",tag:null},
+
+  "B|1":{cls:"n",hours:"19:00–7:00",tag:null},
+  "B|2":{cls:"n",hours:"19:00–7:00",tag:null},
+  "B|3":{cls:"ot",hours:"19:00–7:00",tag:"WI ENT TSP"},
+  "B|5":{cls:"j",hours:"7:00–19:00",tag:null},
+  "B|6":{cls:"j",hours:"7:00–19:00",tag:null},
+
+  "X|3":{cls:"eq",hours:"7:00–19:00",tag:"EQ RELEVE/ELEC INSTR REL USINE · WI ENT REL 12 7"}
+};
+
+function isoWeekNumber(d){
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  return Math.ceil((((date-yearStart)/86400000)+1)/7);
+}
+function fmtDate(d,opts){ return d.toLocaleDateString('fr-CA',opts||{day:'2-digit',month:'short'}); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function ymd(d){ return d.toISOString().slice(0,10); }
+/* Tronque le texte d'étiquette pour garantir un affichage compact (jamais plus de 2 lignes dans
+   la case) — le texte complet reste visible en survol via l'attribut title. */
+function truncTag(tag, max){
+  max = max || 16;
+  if(!tag) return {short:'', full:''};
+  return {short: tag.length>max ? tag.slice(0,max-1)+'…' : tag, full: tag};
+}
+
+/* Période estivale (art. 22 pt.b1) : dimanche suivant le 21 juin → samedi précédant la Fête du travail
+   (1er lundi de septembre). Utilisée pour contextualiser la règle des vacances simultanées A-G. */
+function isSummerPeriod(weekStart){
+  const year = weekStart.getFullYear();
+  const june21 = new Date(year,5,21);
+  const startSunday = addDays(june21, (7-june21.getDay())%7); // dimanche suivant le 21 juin (ou le 21 lui-même s'il l'est déjà)
+  const sept1 = new Date(year,8,1);
+  const labourDay = addDays(sept1, (8-sept1.getDay())%7); // 1er lundi de septembre
+  const endSaturday = addDays(labourDay,-2);
+  return weekStart >= startSunday && weekStart <= endSaturday;
+}
+
+const WEEKS = RAW_WEEKS.map(([start,J,N])=>{
+  const startDate = new Date(start+"T00:00:00");
+  const days = [];
+  for(let i=0;i<7;i++){
+    days.push({ date: addDays(startDate,i), j: J[i], n: N[i] });
+  }
+  return { start: startDate, J, N, days };
+});
+
+let weekIndex = WEEKS.findIndex(w => ymd(w.start) === "2026-08-09");
+if(weekIndex < 0) weekIndex = 0;
+let showReal = (ymd(WEEKS[weekIndex].start) === "2026-08-09");
+
+/* Simulation state */
+let vacDays = new Map(); // clé "code|YYYY-MM-DD" -> "conge" | "vac" (vacances officielle, art. 22)
+function isVacDay(code, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  return vacDays.has(code+'|'+ymd(week.days[dayIdx].date));
+}
+function vacType(code, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  return vacDays.get(code+'|'+ymd(week.days[dayIdx].date)) || null;
+}
+function vacatingCodesThisWeek(w){
+  const week = w || WEEKS[weekIndex];
+  const codes = new Set();
+  week.days.forEach(day=>{
+    ['A','B','C','D','E','F','G'].forEach(code=>{
+      if(vacDays.has(code+'|'+ymd(day.date))) codes.add(code);
+    });
+  });
+  return Array.from(codes);
+}
+let unavailableJo = new Set();
+let simResult = null;
+let viewMode = 'grid'; // 'grid' | 'day'
+let currentDayIdx = 0;
+
+function todayDayIdxInWeek(){
+  const w = WEEKS[weekIndex];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((today - w.start) / 86400000);
+  return (diff>=0 && diff<=6) ? diff : 0;
+}
+
+/* ============================================================
+   HOLIDAYS (simplifié — pour la règle des pires quarts)
+============================================================ */
+const HOLIDAY_DATES = {
+  "2026-04-05":"major", "2026-06-24":"major", "2026-09-07":"major",
+  "2026-12-24":"noel_veille", "2026-12-25":"noel_jour", "2026-12-26":"noel_lendemain",
+  "2026-12-31":"jourAn_veille", "2027-01-01":"jourAn_jour", "2027-01-02":"jourAn_lendemain"
+};
+const MAJOR_EVE = new Set(["2026-04-04","2026-06-23","2026-09-06"]);
+
+function shiftRank(dateObj, isNight){
+  const key = ymd(dateObj);
+  const dow = dateObj.getDay();
+  const h = HOLIDAY_DATES[key];
+  if(h==="jourAn_veille" || h==="noel_veille") return isNight?14:11;
+  if(h==="noel_jour" || h==="jourAn_jour") return isNight?12:13;
+  if(h==="noel_lendemain" || h==="jourAn_lendemain") return isNight?2:10;
+  if(h==="major") return isNight?6:8;
+  if(MAJOR_EVE.has(key) && isNight) return 7;
+  if(dow===0) return isNight?3:4;   // dimanche
+  if(dow===6) return isNight?9:5;   // samedi
+  return isNight?2:1;                // semaine
+}
+const RANK_LABELS = {
+  1:"Jour de semaine", 2:"Nuit de semaine", 3:"Nuit du dimanche", 4:"Jour du dimanche",
+  5:"Jour du samedi", 6:"Nuit des jours fériés", 7:"Veille de nuit des jours fériés",
+  8:"Jour des jours fériés", 9:"Nuit du samedi", 10:"Jour suivant Noël/J. de l'An",
+  11:"Veille de jour Noël/J. de l'An", 12:"Nuit de Noël/J. de l'An", 13:"Jour de Noël/J. de l'An",
+  14:"Veille de nuit Noël/J. de l'An"
+};
+
+/* ============================================================
+   RENDU — Semaine + tableau
+============================================================ */
+function renderWeekControls(){
+  const w = WEEKS[weekIndex];
+  const end = addDays(w.start,6);
+  document.getElementById('weekRange').textContent =
+    fmtDate(w.start,{day:'2-digit',month:'short'}) + ' – ' + fmtDate(end,{day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('weekNum').textContent = 'SEM ' + isoWeekNumber(w.start) + ' · ' + w.start.getFullYear();
+
+  const isRealWeek = ymd(w.start) === REAL_WEEK_START;
+  const banner = document.getElementById('realBanner');
+  banner.style.display = isRealWeek ? 'flex' : 'none';
+  const toggle = document.getElementById('realToggle');
+  toggle.className = 'real-toggle' + (showReal && isRealWeek ? ' on' : '');
+  toggle.textContent = (showReal && isRealWeek) ? 'Horaire publié (réel)' : 'Horaire théorique (ABCDG)';
+
+  document.getElementById('summerBadge').style.display = isSummerPeriod(w.start) ? 'inline-block' : 'none';
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const freezeEl = document.getElementById('freezeStatus');
+  const freezeText = document.getElementById('freezeText');
+  // gel = jeudi 16h de la semaine précédant le dimanche de début
+  const thu = addDays(w.start,-3); // dimanche - 3 = jeudi précédent
+  const isPublished = today > thu || (today.getTime()===thu.getTime());
+  if(today > addDays(w.start,6)){
+    freezeEl.className='freeze-status published'; freezeText.textContent='Semaine passée';
+  } else if(today >= thu){
+    freezeEl.className='freeze-status published';
+    freezeText.textContent='Horaire gelé — publié (gel : ' + fmtDate(thu) + ' 16h00)';
+  } else {
+    freezeEl.className='freeze-status pending';
+    freezeText.textContent='Non gelé — gel prévu ' + fmtDate(thu) + ' 16h00';
+  }
+}
+
+/* Cellule unifiée : combine horaire maître + réservistes + résultat de simulation.
+   Utilisée à la fois par la vue Grille et la vue Jour. */
+const REAL_WEEK_KNOWN_CODES = new Set(
+  Object.keys(REAL_WEEK_CELLS).map(k=>k.split('|')[0])
+);
+
+function computeCell(empCode, dayIdx){
+  const w = WEEKS[weekIndex];
+  const day = w.days[dayIdx];
+
+  if(showReal && ymd(w.start) === REAL_WEEK_START){
+    const real = REAL_WEEK_CELLS[empCode+'|'+dayIdx];
+    if(real) return real;
+    if(REAL_WEEK_KNOWN_CODES.has(empCode)) return {cls:'off', hours:'—', tag:null};
+    // employé absent du document publié (aucune activité/exception rapportée cette semaine-là) :
+    // on retombe sur son horaire maître Jo réel (jamais "disponible" les 7 jours)
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    const code = weekJo && weekJo[empCode] ? weekJo[empCode][dayIdx] : null;
+    if(code==='j') return {cls:'j', hours:'7:00–19:00', tag:'horaire maître Jo'};
+    if(code==='n') return {cls:'n', hours:'19:00–7:00', tag:'horaire maître Jo'};
+    if(code==='.') return {cls:'off', hours:'—', tag:null};
+    if(code==='o') return {cls:'jo', hours:'JO', tag:'disponible'};
+    return {cls:'off', hours:'—', tag:null}; // aucune donnée maître non plus : par prudence, pas d'hypothèse de disponibilité
+  }
+
+  if(simResult){
+    // 1) Cet employé est celui qui COMBLE un quart d'un collègue en vacances : sa propre case
+    //    doit refléter le quart réel (J/N), pas rester à "JO disponible".
+    const coverAssignment = simResult.find(a=>a.coveredBy===empCode && a.dayIdx===dayIdx);
+    if(coverAssignment){
+      const letter = coverAssignment.shift==='j' ? 'J' : 'N';
+      const hours = (coverAssignment.shift==='j' ? '7:00–19:00' : '19:00–7:00') + ` (${letter})`;
+      const cls = coverAssignment.shift==='j' ? 'j' : 'n';
+      let label;
+      if(coverAssignment.result.type==='ot') label = `Surtemps — comble ${coverAssignment.who}`;
+      else if(coverAssignment.result.type==='reg') label = `Renfort de jour — comble ${coverAssignment.who}`;
+      else label = `Jo — comble ${coverAssignment.who}`;
+      return {cls, hours, tag: label};
+    }
+  }
+
+  if(empCode==='X') return {cls:'off', hours:'—', tag:null};
+
+  if(simResult){
+    const override = simResult.find(a=>a.who===empCode && a.dayIdx===dayIdx);
+    if(override){
+      const hours = override.shift==='j' ? '7:00–19:00' : '19:00–7:00';
+      let cls='reg';
+      if(override.result.type==='jo') cls='jo';
+      else if(override.result.type==='ot') cls='ot';
+      else if(override.result.type==='gap') cls='gap';
+      else cls='n';
+      return {cls, hours, tag: override.result.label};
+    }
+  }
+
+  return baseCellStatus(empCode, dayIdx);
+}
+
+/* Statut de base (horaire maître + vacances + indisponibilités ponctuelles), SANS tenir compte
+   d'une simulation de comblement en cours. Utilisé par computeCell (repli) et par le compteur de
+   JO disponibles en haut de page, pour que ce chiffre reste le total réel de la semaine plutôt que
+   de diminuer au fil des assignations d'une simulation — cohérent avec le total affiché dans le
+   panneau de résultats ("JO disponibles (E·F·G)"). */
+function baseCellStatus(empCode, dayIdx){
+  const w = WEEKS[weekIndex];
+  const day = w.days[dayIdx];
+
+  if(isVacDay(empCode, dayIdx, w)){
+    const t = vacType(empCode, dayIdx, w);
+    return t==='vac' ? {cls:'vac', hours:'Vacances', tag:null} : {cls:'conge', hours:'Congé', tag:null};
+  }
+
+  if(empCode==='E' || empCode==='F'){
+    const key = empCode+'|'+ymd(day.date);
+    const isUnavail = unavailableJo.has(key);
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    const code = weekJo ? weekJo[empCode][dayIdx] : 'o'; // repli : JO par défaut si semaine hors table source
+    if(code==='j') return {cls:'j', hours:'7:00–19:00', tag:'horaire maître Jo'};
+    if(code==='n') return {cls:'n', hours:'19:00–7:00', tag:'horaire maître Jo'};
+    if(code==='.') return {cls:'off', hours:'—', tag:null}; // repos selon l'horaire maître Jo
+    // code === 'o' (JO / disponible)
+    return isUnavail
+      ? {cls:'gap', hours:'Indispo.', tag:'signalé'}
+      : {cls:'jo', hours:'JO', tag:'disponible'};
+  }
+  if(day.j===empCode) return {cls:'j', hours:'7:00–19:00', tag:null};
+  if(day.n===empCode) return {cls:'n', hours:'19:00–7:00', tag:null};
+
+  if(empCode==='G'){
+    // Données corrigées : le motif "j/n" du document Jo concorde désormais exactement avec les
+    // jours ABCDG réels (vérifié sur les 53 semaines transcrites) — plus besoin de décalage.
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    const code = weekJo && weekJo.G ? weekJo.G[dayIdx] : null;
+    if(code==='o'){
+      const key = 'G|'+ymd(day.date);
+      return unavailableJo.has(key)
+        ? {cls:'gap', hours:'Indispo.', tag:'signalé'}
+        : {cls:'jo', hours:'JO', tag:'disponible'};
+    }
+    // code 'j'/'n' déjà couvert plus haut par day.j/day.n (ABCDG) ; '.' ou absence de donnée => repos
+  }
+
+  return {cls:'off', hours:'—', tag:null};
+}
+
+/* Construit le HTML de l'en-tête + du corps de la grille pour une semaine donnée, sans toucher
+   au DOM — réutilisé par renderTable() (affichage normal) et par l'impression multi-semaines. */
+function buildScheduleHTML(w, isReal){
+  const headHTML = '<th class="emp-col">Employé</th>' + w.days.map((d,i)=>{
+    const we = (i===0||i===6) ? ' weekend-col' : '';
+    return `<th class="${we}">${DAY_LABELS[i]}<span class="daynum">${fmtDate(d.date,{day:'2-digit',month:'2-digit'})}</span></th>`;
+  }).join('');
+
+  let bodyHTML = '';
+  EMPLOYEES.forEach(emp=>{
+    let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
+    const clickable = !isReal && emp.code!=='X';
+    w.days.forEach((day,i)=>{
+      const c = computeCell(emp.code, i);
+      const canToggle = clickable && worksThisDay(emp.code, i, w);
+      const t = truncTag(c.tag, 15);
+      const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
+      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour marquer/retirer une vacance ce jour-là"':''}><span class="shift ${c.cls}">${c.hours}${tagHtml}</span></td>`;
+    });
+    bodyHTML += `<tr>${cells}</tr>`;
+  });
+  return {headHTML, bodyHTML};
+}
+
+function renderTable(){
+  const w = WEEKS[weekIndex];
+  const isReal = showReal && ymd(w.start)===REAL_WEEK_START;
+  const {headHTML, bodyHTML} = buildScheduleHTML(w, isReal);
+  document.getElementById('headRow').innerHTML = headHTML;
+  const body = document.getElementById('bodyRows');
+  body.innerHTML = bodyHTML;
+  if(!isReal){
+    body.querySelectorAll('.shift-cell.toggle-vac').forEach(td=>{
+      td.onclick = ()=> toggleVacDay(td.dataset.code, parseInt(td.dataset.day,10), w);
+    });
+  }
+}
+
+function renderDayView(){
+  const w = WEEKS[weekIndex];
+  const isReal = showReal && ymd(w.start)===REAL_WEEK_START;
+  const day = w.days[currentDayIdx];
+  document.getElementById('dayTitle').innerHTML =
+    DAY_LABELS[currentDayIdx].replace(/^./,c=>c.toUpperCase()) + ' ' + fmtDate(day.date,{day:'2-digit',month:'long'}) +
+    `<span class="sub">Semaine ${isoWeekNumber(w.start)} · ${(currentDayIdx===0||currentDayIdx===6)?'Fin de semaine':'Semaine régulière'}</span>`;
+
+  const cards = document.getElementById('dayCards');
+  cards.innerHTML = '';
+  EMPLOYEES.forEach(emp=>{
+    const c = computeCell(emp.code, currentDayIdx);
+    const clickable = !isReal && emp.code!=='X' && worksThisDay(emp.code, currentDayIdx, w);
+    const t = truncTag(c.tag, 28);
+    const div = document.createElement('div');
+    div.className = 'day-card ' + c.cls + (clickable?' toggle-vac':'');
+    div.innerHTML = `
+      <span class="letter-chip">${emp.code}</span>
+      <div class="info"><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="role">${emp.role}</div></div>
+      <div class="status"><span class="hours">${c.hours}</span>${c.tag?`<span class="tag">${t.short}</span>`:''}</div>
+    `;
+    if(clickable){
+      div.title = 'Cliquer pour marquer/retirer une vacance ce jour-là';
+      div.onclick = ()=> toggleVacDay(emp.code, currentDayIdx, w);
+    }
+    cards.appendChild(div);
+  });
+}
+
+/* ============================================================
+   SIMULATEUR — chips
+============================================================ */
+function renderSeniorityList(){
+  const list = document.getElementById('seniorityList');
+  list.innerHTML = '';
+  seniorityOrder.forEach((code,idx)=>{
+    const row = document.createElement('div');
+    row.className = 'seniority-row';
+    const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
+    row.innerHTML = `
+      <span class="rank-num">${idx+1}</span>
+      <span class="letter-chip">${code}</span>
+      <span class="sname">${name}<span class="sub">${idx===0?'plus ancien':(idx===seniorityOrder.length-1?'plus jeune':'')}</span></span>
+      <span class="move-btns">
+        <button data-dir="up" ${idx===0?'disabled':''} title="Monter">▲</button>
+        <button data-dir="down" ${idx===seniorityOrder.length-1?'disabled':''} title="Descendre">▼</button>
+      </span>`;
+    row.querySelector('[data-dir="up"]').onclick = ()=>{
+      if(idx>0){ [seniorityOrder[idx-1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx-1]]; renderSeniorityList(); }
+    };
+    row.querySelector('[data-dir="down"]').onclick = ()=>{
+      if(idx<seniorityOrder.length-1){ [seniorityOrder[idx+1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx+1]]; renderSeniorityList(); }
+    };
+    list.appendChild(row);
+  });
+}
+
+/* Bascule un jour d'absence pour un employé (A-G) — type "congé" par défaut (jour précis,
+   cliqué directement dans la grille ou via les boutons jour du panneau). Invalide la simulation
+   en cours (l'état d'absence a changé, il faut relancer le comblement). */
+function toggleVacDay(code, dayIdx, w, type){
+  const week = w || WEEKS[weekIndex];
+  const key = code+'|'+ymd(week.days[dayIdx].date);
+  if(vacDays.has(key)) vacDays.delete(key); else vacDays.set(key, type || 'conge');
+  simResult = null;
+  renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+  document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+}
+
+/* Un jour est "prenable en congé" pour cet employé seulement s'il y travaille réellement cette
+   semaine-là (quart ABCDG pour A-D-G, ou statut non-repos de l'horaire maître Jo pour E-F) —
+   cet ensemble de jours change chaque semaine, au même titre que la rotation elle-même. */
+function worksThisDay(code, dayIdx, w){
+  const day = w.days[dayIdx];
+  if(code==='G'){
+    if(day.j==='G' || day.n==='G') return true;
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    return weekJo && weekJo.G ? weekJo.G[dayIdx]!=='.' : true;
+  }
+  if(code==='E' || code==='F'){
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    return weekJo && weekJo[code] ? weekJo[code][dayIdx]!=='.' : true;
+  }
+  return day.j===code || day.n===code;
+}
+
+function renderChips(){
+  const w = WEEKS[weekIndex];
+  const picker = document.getElementById('vacDayPicker');
+  picker.innerHTML = '';
+  ['A','B','C','D','G','E','F'].forEach(code=>{
+    const row = document.createElement('div');
+    row.className = 'vac-row';
+    const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
+    const workDays = w.days.map((day,i)=>i).filter(i=>worksThisDay(code,i,w));
+    const allWorkOn = workDays.length>0 && workDays.every(i=>vacDays.has(code+'|'+ymd(w.days[i].date)));
+    const allWeekVac = w.days.every((day,i)=>vacType(code,i,w)==='vac');
+    let html = `<span class="letter-chip">${code}</span><span class="vac-name">${name}</span>`;
+    html += `<button class="vac-week-btn vac-btn-vac${allWeekVac?' active':''}" data-mode="vac" title="Marque toute la semaine (7 jours) comme Vacances officielle">Vacance</button>`;
+    html += `<button class="vac-week-btn${allWorkOn?' active':''}" data-mode="conge-all" title="Marque tous les jours travaillés cette semaine comme Congé">Toute la sem.</button>`;
+    html += `<div class="vac-day-btns">`;
+    workDays.forEach(i=>{
+      const day = w.days[i];
+      const key = code+'|'+ymd(day.date);
+      html += `<button class="vac-day-btn${vacDays.has(key)?' active':''}" data-day="${i}">${DAY_LABELS[i][0].toUpperCase()}</button>`;
+    });
+    if(workDays.length===0) html += `<span style="font-size:10.5px;color:var(--text-dim2);font-style:italic;">aucun quart cette semaine</span>`;
+    html += `</div>`;
+    row.innerHTML = html;
+    row.querySelector('[data-mode="vac"]').onclick = ()=>{
+      const nowAllVac = w.days.every((day,i)=>vacType(code,i,w)==='vac');
+      w.days.forEach((day,i)=>{
+        const key = code+'|'+ymd(day.date);
+        if(nowAllVac) vacDays.delete(key); else vacDays.set(key, 'vac');
+      });
+      simResult = null;
+      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+      document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+    };
+    row.querySelector('[data-mode="conge-all"]').onclick = ()=>{
+      const nowAll = workDays.length>0 && workDays.every(i=>vacDays.has(code+'|'+ymd(w.days[i].date)));
+      workDays.forEach(i=>{
+        const key = code+'|'+ymd(w.days[i].date);
+        if(nowAll) vacDays.delete(key); else vacDays.set(key, 'conge');
+      });
+      simResult = null;
+      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+      document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
+    };
+    row.querySelectorAll('[data-day]').forEach(btn=>{
+      const i = parseInt(btn.dataset.day, 10);
+      btn.onclick = ()=> toggleVacDay(code, i, w);
+    });
+    picker.appendChild(row);
+  });
+
+  const jChips = document.getElementById('joChips');
+  jChips.innerHTML = '';
+  const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+  ['E','F','G'].forEach(code=>{
+    w.days.forEach((day,i)=>{
+      if(weekJo && weekJo[code] && weekJo[code][i]!=='o') return; // pas un jour JO cette semaine-là : rien à basculer
+      const key = code+'|'+ymd(day.date);
+      const chip = document.createElement('div');
+      chip.className = 'chip-toggle jo-toggle' + (unavailableJo.has(key)?' active':'');
+      chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}`;
+      chip.onclick = ()=>{
+        if(unavailableJo.has(key)) unavailableJo.delete(key); else unavailableJo.add(key);
+        renderChips(); renderTable(); renderJoStat();
+      };
+      jChips.appendChild(chip);
+    });
+  });
+}
+
+/* ============================================================
+   MOTEUR DE COMBLEMENT
+============================================================ */
+function runSimulation(){
+  const w = WEEKS[weekIndex];
+  const vac = vacatingCodesThisWeek(w);
+  const resultBox = document.getElementById('resultBox');
+
+  if(vac.length===0){
+    resultBox.innerHTML = '<div class="placeholder">Aucun jour de vacances sélectionné. Cliquez au moins un jour pour un employé (titulaire A–D–G ou réserviste E–F) pour lancer la simulation.</div>';
+    simResult=null; renderLadder([]); return;
+  }
+
+  // Seuls A,B,C,D,G occupent des quarts fixes dans l'horaire maître ABCDG.
+  // La règle spéciale (jusqu'à 4 quarts non couverts, max 2 en surtemps) peut être déclenchée
+  // par 2 employés de relève EN VACANCES SIMULTANÉMENT, parmi A à G (pas seulement A à D),
+  // typiquement durant la période estivale.
+  const rotationVacants = vac.filter(c=>['A','B','C','D','G'].includes(c));
+  const specialRuleCount = rotationVacants.length; // déclenche la règle spéciale (art. 8.01 pt.9)
+  // E et F n'ont pas de quart de rotation : leur vacance retire simplement un Jo du bassin de comblement.
+
+  // Récupère les quarts des employés à rotation (A-D,G), UNIQUEMENT pour les jours où ils sont
+  // effectivement marqués en vacances cette semaine (sélection au jour près).
+  let uncovered = [];
+  w.days.forEach((day,i)=>{
+    rotationVacants.forEach(code=>{
+      if(!isVacDay(code,i,w)) return;
+      if(day.j===code) uncovered.push({dayIdx:i, date:day.date, shift:'j', who:code});
+      if(day.n===code) uncovered.push({dayIdx:i, date:day.date, shift:'n', who:code});
+    });
+  });
+  // Attribution dans l'ordre de l'échelle des pires quarts (du plus pire au moins pire) : E se voit
+  // offrir en premier les pires quarts disponibles, jusqu'à son quota — pas un simple ordre
+  // chronologique — pour que les quarts les plus pénibles (nuits, fins de semaine) soient traités
+  // en priorité plutôt que de forcer un Jo moins prioritaire à les prendre faute de quota restant.
+  uncovered = uncovered
+    .map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}))
+    .sort((a,b)=> b.rank-a.rank || a.dayIdx-b.dayIdx);
+
+  const joOrder = ['E','F','G'];
+  // Quota hebdomadaire de chaque Jo = son propre nombre de JO cette semaine-là (jamais plus de 4,
+  // jamais moins que ce que montre son horaire maître). Une fois son quota atteint, on passe au
+  // suivant (E→F→G) — même en empruntant un jour hors-JO, un Jo ne fait jamais plus de remplacements
+  // que son nombre de JO réel cette semaine-là.
+  function joQuota(code){
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    if(weekJo && weekJo[code]) return [...weekJo[code]].filter(c=>c==='o').length;
+    return 4; // semaine hors table source : repli sur le maximum structurel (4/semaine)
+  }
+  const assignedCount = {E:0, F:0, G:0};
+  // Suivi des quarts déjà occupés par chaque Jo (assignations de comblement + leurs propres quarts
+  // fixes ABCDG/horaire maître) — sert à empêcher un Jo d'enchaîner deux quarts consécutifs
+  // (nuit puis jour le lendemain matin, ou jour puis nuit le même jour) : jamais 24h sans repos.
+  const occupiedSlots = {E:new Set(), F:new Set(), G:new Set()};
+  w.days.forEach((day,i)=>{
+    if(day.j==='G') occupiedSlots.G.add(i+':j');
+    if(day.n==='G') occupiedSlots.G.add(i+':n');
+    ['E','F'].forEach(code=>{
+      const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+      if(weekJo && weekJo[code]){
+        const c = weekJo[code][i];
+        if(c==='j') occupiedSlots[code].add(i+':j');
+        if(c==='n') occupiedSlots[code].add(i+':n');
+      }
+    });
+  });
+  function adjacentSlots(dayIdx, shift){
+    // (X,j) touche (X-1,n) et (X,n) ; (X,n) touche (X,j) et (X+1,j)
+    return shift==='j' ? [(dayIdx-1)+':n', dayIdx+':n'] : [dayIdx+':j', (dayIdx+1)+':j'];
+  }
+  // Priorité stricte E → F → G : on comble les quarts possibles avec E (peu importe si le jour
+  // est son "vrai" jour JO habituel ou non, tant que son quota hebdomadaire n'est pas atteint)
+  // avant de considérer F ; F est ensuite épuisé avant G.
+  // On ne passe au suivant que si le précédent est réellement indisponible (vacances, quart déjà
+  // fixé ce jour-là, quota atteint, ou quart adjacent déjà occupé — jamais 24h consécutives) —
+  // golden rule : on écrase l'horaire maître du Jo plutôt que d'abandonner vers la liste d'appel
+  // (confirmé par le cas réel Lachance, appelé hors de ses jours JO habituels), mais jamais au-delà
+  // de son propre nombre de JO cette semaine-là, ni au prix d'un enchaînement de 24h sans repos.
+  function joAvailable(code, dayIdx, shift){
+    if(isVacDay(code, dayIdx, w)) return false; // Jo lui-même en vacances ce jour-là
+    if(assignedCount[code] >= joQuota(code)) return false; // quota hebdomadaire atteint
+    if(adjacentSlots(dayIdx,shift).some(k=>occupiedSlots[code].has(k))) return false; // 24h consécutives
+
+    if(code==='G'){
+      const day = w.days[dayIdx];
+      if(day.j==='G' || day.n==='G') return false; // G a déjà son propre quart ABCDG ce jour-là
+      const key = 'G|'+ymd(w.days[dayIdx].date);
+      return !unavailableJo.has(key);
+    }
+
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    if(weekJo && weekJo[code]){
+      const dayCode = weekJo[code][dayIdx];
+      if(dayCode==='j' || dayCode==='n') return false; // quart fixe déjà prévu ce jour-là : conflit réel
+    }
+    const key = code+'|'+ymd(w.days[dayIdx].date);
+    return !unavailableJo.has(key);
+  }
+  function isOwnJoDay(code, dayIdx){
+    if(code==='G'){
+      const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+      return weekJo && weekJo.G ? weekJo.G[dayIdx]==='o' : true;
+    }
+    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+    if(!weekJo || !weekJo[code]) return true;
+    return weekJo[code][dayIdx]==='o';
+  }
+  function findJo(dayIdx, shift){
+    const c = joOrder.find(c=>joAvailable(c,dayIdx,shift));
+    if(c){
+      assignedCount[c]++;
+      occupiedSlots[c].add(dayIdx+':'+shift);
+    }
+    return {code:c||null, borrowed: c ? !isOwnJoDay(c,dayIdx) : false};
+  }
+
+  if(uncovered.length===0){
+    // Seuls des réservistes (E/F) sont en vacances : aucun quart de rotation touché,
+    // mais le bassin de Jo disponibles est réduit d'autant.
+    const reservistesOut = vac.filter(c=>['E','F'].includes(c));
+    resultBox.innerHTML = `<span class="rule-tag">Aucun quart titulaire touché</span>
+      <h3>Réserviste(s) en vacances : ${reservistesOut.join(', ') || '—'}</h3>
+      <div class="result-line"><span class="day">Cette semaine</span><span class="action"><b>Bassin de comblement réduit — retiré(s) de l'ordre des remplaçants (E→F→G)</b></span></div>`;
+    simResult = null;
+    renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+    return;
+  }
+
+  let assignments = [];
+
+  if(specialRuleCount < 2){
+    // Comblement simple : Jo en commençant par la lettre E (Procédure pt. règle d'or / art 8.01 f6)
+    uncovered.forEach(u=>{
+      const {code:jo, borrowed} = findJo(u.dayIdx, u.shift);
+      assignments.push({
+        ...u,
+        coveredBy: jo || null,
+        result: jo ? {type:'jo', label: borrowed ? `Jo ${jo} — assignation régulière (hors horaire JO habituel)` : `Jo ${jo} — assignation régulière`} :
+                      {type:'gap', label:"Aucun Jo disponible — liste d'appel du secteur (art. 8.01 f5/f7)"}
+      });
+    });
+  } else {
+    // Règle spéciale : 2 employés de relève (A à G, pas seulement A-D) simultanément en vacances,
+    // typiquement durant la période estivale → jusqu'à 4 quarts non couverts,
+    // max 2 en surtemps (pires quarts), reste = employé de jour à temps régulier.
+    let stillOpen = [];
+    uncovered.forEach(u=>{
+      const {code:jo, borrowed} = findJo(u.dayIdx, u.shift);
+      if(jo){
+        assignments.push({...u, coveredBy: jo, result:{type:'jo', label: borrowed ? `Jo ${jo} — assignation régulière (hors horaire JO habituel)` : `Jo ${jo} — assignation régulière`}});
+      } else {
+        stillOpen.push(u);
+      }
+    });
+    // Classement des quarts restants par rang (pires quarts) — les 2 moins pires en surtemps
+    stillOpen = stillOpen.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
+    stillOpen.sort((a,b)=>a.rank-b.rank);
+    // Le surtemps est offert par ANCIENNETÉ (pas par l'ordre E-F-G, réservé au comblement normal).
+    // Chaque candidat est vérifié pour LE JOUR précis du quart à combler (pas toute la semaine).
+    let otIdx = 0;
+    stillOpen.forEach((u,idx)=>{
+      if(idx<2){
+        let candidate = null;
+        while(otIdx < seniorityOrder.length){
+          const c = seniorityOrder[otIdx];
+          otIdx++;
+          if(!isVacDay(c, u.dayIdx, w)){ candidate = c; break; }
+        }
+        const who = candidate ? `${candidate}` : 'relève (à déterminer)';
+        assignments.push({...u, coveredBy: candidate, result:{type:'ot', label:`Surtemps — ${who} (ancienneté) — rang ${u.rank} (${RANK_LABELS[u.rank]})`}});
+      } else {
+        assignments.push({...u, coveredBy: 'X', result:{type:'reg', label:'Employé de jour — assignation régulière (EQ RELEVE)'}});
+      }
+    });
+  }
+
+  simResult = assignments;
+  const totalJoAvailable = joOrder.reduce((sum,c)=>sum+joQuota(c),0);
+  const joUsed = assignments.filter(a=>a.result.type==='jo').length;
+  renderResultBox(assignments, vac, specialRuleCount, {
+    totalReplacements: uncovered.length,
+    totalJoAvailable,
+    joUsed,
+    joRemaining: totalJoAvailable - joUsed
+  });
+  renderTable();
+  renderDayView();
+  renderJoStat();
+  renderLadder(assignments.filter(a=>a.result.type==='ot' || a.result.type==='reg' || a.result.type==='gap'));
+}
+
+function renderResultBox(assignments, vac, specialRuleCount, stats){
+  const resultBox = document.getElementById('resultBox');
+  const summer = isSummerPeriod(WEEKS[weekIndex].start);
+  let ruleTag;
+  if(specialRuleCount>=2){
+    ruleTag = 'Politique employeur — 2 employés de relève (A à G) en vacances simultanément'
+      + (summer ? ' · période estivale' : ' · hors période estivale (à valider)');
+  } else {
+    ruleTag = 'Art. 8.01 f)6 — ordre des remplaçants, débutant par la lettre E';
+  }
+  let html = `<span class="rule-tag">${ruleTag}</span><h3>Absent(s) cette semaine : ${vac.join(', ')}</h3>`;
+  html += `<div class="sim-stats">
+    <div class="sim-stat"><span class="sim-stat-num">${stats.totalReplacements}</span><span class="sim-stat-label">Remplacements à faire</span></div>
+    <div class="sim-stat"><span class="sim-stat-num">${stats.totalJoAvailable}</span><span class="sim-stat-label">JO disponibles (E·F·G)</span></div>
+    <div class="sim-stat ${stats.joRemaining<0?'sim-stat-warn':''}"><span class="sim-stat-num">${stats.joRemaining}</span><span class="sim-stat-label">JO restant après comblement</span></div>
+  </div>`;
+  assignments
+    .sort((a,b)=> a.dayIdx-b.dayIdx || (a.shift==='n'?1:0)-(b.shift==='n'?1:0))
+    .forEach(a=>{
+      const dayLabel = DAY_LABELS[a.dayIdx] + ' ' + fmtDate(a.date,{day:'2-digit',month:'2-digit'});
+      const shiftLabel = a.shift==='j' ? '7h–19h' : '19h–7h';
+      let cls='reg';
+      if(a.result.type==='ot') cls='ot'; else if(a.result.type==='jo') cls=''; else if(a.result.type==='gap') cls='alert';
+      html += `<div class="result-line"><span class="day">${dayLabel} · ${shiftLabel} (${a.who})</span><span class="action">${cls? '<b class="'+cls+'">':'<b>'}${a.result.label}</b></span></div>`;
+    });
+  resultBox.innerHTML = html;
+}
+
+/* ============================================================
+   ÉCHELLE DES PIRES QUARTS
+============================================================ */
+function renderLadder(activeShifts){
+  const ladder = document.getElementById('ladder');
+  ladder.innerHTML = '';
+  const activeMap = {};
+  (activeShifts||[]).forEach(a=>{
+    const r = shiftRank(a.date, a.shift==='n');
+    activeMap[r] = a.result.type; // 'ot' or 'reg' or 'gap'
+  });
+  for(let r=1;r<=14;r++){
+    const div = document.createElement('div');
+    let cls='rung';
+    if(activeMap[r]==='ot') cls+=' active-ot';
+    else if(activeMap[r]==='reg' || activeMap[r]==='gap') cls+=' active-reg';
+    div.className = cls;
+    const badge = activeMap[r]==='ot' ? 'SURTEMPS' : (activeMap[r] ? 'RÉGULIER' : '');
+    div.innerHTML = `<span class="rk">${r}</span><span class="desc">${RANK_LABELS[r]}</span><span class="badge">${badge}</span>`;
+    ladder.appendChild(div);
+  }
+}
+
+/* ============================================================
+   RÉSUMÉ
+============================================================ */
+/* ============================================================
+   COMPTEUR DE JO DISPONIBLES (bien visible)
+============================================================ */
+function renderJoStat(){
+  const w = WEEKS[weekIndex];
+  const useReal = showReal && ymd(w.start)===REAL_WEEK_START;
+  let countE=0, countF=0, countG=0;
+  w.days.forEach((day,i)=>{
+    // Hors semaine "réelle publiée", on utilise le statut de base (sans la simulation en cours)
+    // pour que ce total reste le même chiffre que "JO disponibles" dans le panneau de résultats.
+    if((useReal ? computeCell('E',i) : baseCellStatus('E',i)).cls==='jo') countE++;
+    if((useReal ? computeCell('F',i) : baseCellStatus('F',i)).cls==='jo') countF++;
+    if((useReal ? computeCell('G',i) : baseCellStatus('G',i)).cls==='jo') countG++;
+  });
+  const total = countE + countF + countG;
+  const hasRealData = !!REAL_JO_DEFAULT[ymd(w.start)];
+  document.getElementById('joStatNum').textContent = total;
+  let sub;
+  if(showReal && ymd(w.start)===REAL_WEEK_START){
+    sub = 'Réservistes E · F · G — horaire publié (réel)';
+  } else if(hasRealData){
+    sub = 'Réservistes E · F · G — horaire maître Jo réel (max. 4/semaine/lettre)';
+  } else {
+    sub = 'Réservistes E · F · G — semaine hors table source (repli par défaut)';
+  }
+  document.getElementById('joStatSub').textContent = sub;
+  document.getElementById('joStatBreakdown').innerHTML =
+    `<span class="jo-pill">E — <b>${countE}</b> j.</span><span class="jo-pill">F — <b>${countF}</b> j.</span><span class="jo-pill">G — <b>${countG}</b> j.</span>`;
+}
+
+function renderSummary(){
+  const w = WEEKS[weekIndex];
+  const body = document.getElementById('summaryBody');
+  body.innerHTML='';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const thu = addDays(w.start,-3);
+  const status = today >= thu ? 'Publié' : 'En attente de gel';
+
+  EMPLOYEES.forEach(emp=>{
+    let jCount=0,nCount=0,weekendCount=0;
+    w.days.forEach((day,i)=>{
+      if(emp.code!=='E' && emp.code!=='F'){
+        if(day.j===emp.code){ jCount++; if(i===0||i===6) weekendCount++; }
+        if(day.n===emp.code){ nCount++; if(i===0||i===6) weekendCount++; }
+      }
+    });
+    const total = jCount+nCount;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><span class="letter-chip" style="display:inline-flex;width:22px;height:22px;font-size:11px;margin-right:8px;">${emp.code}</span>${emp.role}</td>
+      <td>${emp.code==='E'||emp.code==='F' ? '—' : jCount}</td>
+      <td>${emp.code==='E'||emp.code==='F' ? '—' : nCount}</td>
+      <td>${emp.code==='E'||emp.code==='F' ? '—' : total}</td>
+      <td>${emp.code==='E'||emp.code==='F' ? '—' : weekendCount}</td>
+      <td style="color:${status==='Publié'?'var(--ok)':'var(--jour)'}">${status}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+/* ============================================================
+   INIT + EVENTS
+============================================================ */
+function refreshAll(){
+  renderWeekControls();
+  renderTable();
+  renderDayView();
+  renderChips();
+  renderSummary();
+  renderJoStat();
+  renderLadder(simResult ? simResult.filter(a=>a.result.type==='ot'||a.result.type==='reg'||a.result.type==='gap') : []);
+}
+
+document.getElementById('prevWeek').onclick = ()=>{
+  weekIndex = Math.max(0, weekIndex-1);
+  simResult=null; vacDays=new Map(); unavailableJo=new Set(); currentDayIdx=0;
+  refreshAll();
+};
+document.getElementById('nextWeek').onclick = ()=>{
+  weekIndex = Math.min(WEEKS.length-1, weekIndex+1);
+  simResult=null; vacDays=new Map(); unavailableJo=new Set(); currentDayIdx=0;
+  refreshAll();
+};
+document.getElementById('gotoNext').onclick = ()=>{
+  const today = new Date(); today.setHours(0,0,0,0);
+  let idx = WEEKS.findIndex(w=>{
+    const thu = addDays(w.start,-3);
+    return today < thu || (today>=w.start && today<=addDays(w.start,6));
+  });
+  if(idx<0) idx = WEEKS.findIndex(w=> w.start > today);
+  weekIndex = idx>=0 ? idx : weekIndex;
+  simResult=null; vacDays=new Map(); unavailableJo=new Set();
+  currentDayIdx = todayDayIdxInWeek();
+  refreshAll();
+};
+document.getElementById('runSim').onclick = runSimulation;
+document.getElementById('resetSim').onclick = ()=>{
+  vacDays=new Map(); unavailableJo=new Set(); simResult=null;
+  document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
+  refreshAll();
+};
+
+document.getElementById('realToggle').onclick = ()=>{
+  showReal = !showReal;
+  renderWeekControls();
+  renderTable();
+  renderDayView();
+  renderSummary();
+  renderJoStat();
+};
+
+/* Construit le bloc HTML imprimable (titre + grille) pour une semaine donnée, sans toucher
+   à l'affichage courant à l'écran (bascule temporairement weekIndex, puis le restaure). */
+function buildPrintWeekBlock(wIndex){
+  const savedIndex = weekIndex;
+  weekIndex = wIndex;
+  const w = WEEKS[weekIndex];
+  const isReal = showReal && ymd(w.start)===REAL_WEEK_START;
+  const {headHTML, bodyHTML} = buildScheduleHTML(w, isReal);
+  const end = addDays(w.start,6);
+  const title = `Horaire relève entretien — semaine du ${fmtDate(w.start,{day:'2-digit',month:'long',year:'numeric'})} au ${fmtDate(end,{day:'2-digit',month:'long',year:'numeric'})}`;
+  const sub = `SEM ${isoWeekNumber(w.start)} · ${isReal ? 'Horaire publié (réel)' : 'Horaire théorique (ABCDG)'} · Imprimé le ${fmtDate(new Date(),{day:'2-digit',month:'long',year:'numeric'})}`;
+  weekIndex = savedIndex;
+  return `<div class="print-week-block">
+    <div class="print-only-header"><div class="pt">${title}</div><div class="ps">${sub}</div></div>
+    <table class="schedule"><thead><tr>${headHTML}</tr></thead><tbody>${bodyHTML}</tbody></table>
+  </div>`;
+}
+function printWeeks(indices){
+  document.getElementById('printRoot').innerHTML = indices.map(buildPrintWeekBlock).join('');
+  document.body.classList.add('printing-grid');
+  window.print();
+}
+window.addEventListener('afterprint', ()=>{
+  document.body.classList.remove('printing-grid');
+  document.getElementById('printRoot').innerHTML = '';
+});
+
+document.getElementById('printGridBtn').onclick = ()=> printWeeks([weekIndex]);
+document.getElementById('print4WeeksBtn').onclick = ()=>{
+  const indices = [];
+  for(let i=0; i<4 && weekIndex+i<WEEKS.length; i++) indices.push(weekIndex+i);
+  printWeeks(indices);
+};
+
+document.getElementById('viewGridBtn').onclick = ()=>{
+  viewMode='grid';
+  document.getElementById('viewGridBtn').classList.add('active');
+  document.getElementById('viewDayBtn').classList.remove('active');
+  document.getElementById('gridPanel').style.display='';
+  document.getElementById('dayPanel').classList.remove('active');
+};
+document.getElementById('viewDayBtn').onclick = ()=>{
+  viewMode='day';
+  document.getElementById('viewDayBtn').classList.add('active');
+  document.getElementById('viewGridBtn').classList.remove('active');
+  document.getElementById('gridPanel').style.display='none';
+  document.getElementById('dayPanel').classList.add('active');
+  renderDayView();
+};
+document.getElementById('prevDay').onclick = ()=>{
+  currentDayIdx = (currentDayIdx+6)%7;
+  renderDayView();
+};
+document.getElementById('nextDay').onclick = ()=>{
+  currentDayIdx = (currentDayIdx+1)%7;
+  renderDayView();
+};
+
+refreshAll();
+renderSeniorityList();/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
+   (icône sur l'écran d'accueil, plein écran, fonctionne même hors-ligne une fois visité). */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>

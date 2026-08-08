@@ -1,0 +1,26 @@
+{
+  "name": "Simulateur d'horaire — Relève Entretien Windsor",
+  "short_name": "Horaire Relève",
+  "description": "Simulateur d'horaire et de comblement pour l'équipe de relève entretien (mécanique / électro-instrumentation) — Windsor",
+  "start_url": "./simulateur_horaire_releve.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0e131a",
+  "theme_color": "#0e131a",
+  "lang": "fr-CA",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
