@@ -1,6 +1,6 @@
 const CACHE_NAME = 'horaire-releve-v1';
 const ASSETS = [
-  './simulateur_horaire_releve.html',
+  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
