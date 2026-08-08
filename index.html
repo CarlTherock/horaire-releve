@@ -1172,7 +1172,7 @@ function buildScheduleHTML(w, isReal){
       const canToggle = clickable && worksThisDay(emp.code, i, w);
       const t = truncTag(c.tag, 15);
       const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
-      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour marquer/retirer une vacance ce jour-là"':''}><span class="shift ${c.cls}">${c.hours}${tagHtml}</span></td>`;
+      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${c.hours}${tagHtml}</span></td>`;
     });
     bodyHTML += `<tr>${cells}</tr>`;
   });
@@ -1215,7 +1215,7 @@ function renderDayView(){
       <div class="status"><span class="hours">${c.hours}</span>${c.tag?`<span class="tag">${t.short}</span>`:''}</div>
     `;
     if(clickable){
-      div.title = 'Cliquer pour marquer/retirer une vacance ce jour-là';
+      div.title = 'Cliquer pour faire le cycle : normal → congé → maladie → normal';
       div.onclick = ()=> toggleVacDay(emp.code, currentDayIdx, w);
     }
     cards.appendChild(div);
@@ -1250,13 +1250,22 @@ function renderSeniorityList(){
   });
 }
 
-/* Bascule un jour d'absence pour un employé (A-G) — type "congé" par défaut (jour précis,
-   cliqué directement dans la grille ou via les boutons jour du panneau). Invalide la simulation
-   en cours (l'état d'absence a changé, il faut relancer le comblement). */
+/* Bascule un jour d'absence pour un employé (A-G) — jour précis, cliqué directement dans la
+   grille ou via les boutons jour du panneau. Sans type forcé, fait un cycle normal → congé →
+   maladie → normal. Avec un type forcé (ex. depuis un bouton dédié), bascule simplement ce
+   type précis on/off. Invalide la simulation en cours (l'état d'absence a changé, il faut
+   relancer le comblement). */
 function toggleVacDay(code, dayIdx, w, type){
   const week = w || WEEKS[weekIndex];
   const key = code+'|'+ymd(week.days[dayIdx].date);
-  if(vacDays.has(key)) vacDays.delete(key); else vacDays.set(key, type || 'conge');
+  if(type){
+    if(vacDays.get(key)===type) vacDays.delete(key); else vacDays.set(key, type);
+  } else {
+    const current = vacDays.get(key);
+    if(!current) vacDays.set(key, 'conge');
+    else if(current==='conge') vacDays.set(key, 'maladie');
+    else vacDays.delete(key);
+  }
   simResult = null;
   renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
   document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
