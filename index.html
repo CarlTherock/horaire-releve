@@ -1839,11 +1839,23 @@ function runSimulation(){
     // Classement des quarts restants par rang (pires quarts) — les 2 moins pires en surtemps
     stillOpen = stillOpen.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
     stillOpen.sort((a,b)=>a.rank-b.rank);
+    // Renfort de jour (H, I, J) : contrairement aux autres lettres, chacun ne peut être cédulé sur
+    // plus de 3 relèves par semaine — règle propre à H/I/J seulement. Une fois son plafond atteint,
+    // on passe au suivant (H→I→J) ; si tous sont épuisés, le quart tombe en liste d'appel.
+    const eqCount = {H:0, I:0, J:0};
+    let eqCandidates = ['H','I','J'].filter(c=>REAL_NAMES[c] && REAL_NAMES[c].trim());
+    if(eqCandidates.length===0) eqCandidates = ['H']; // repli tant qu'aucun nom n'est configuré
     stillOpen.forEach((u,idx)=>{
       if(idx<2){
         assignments.push(resolveOt(u));
       } else {
-        assignments.push({...u, coveredBy: 'H', result:{type:'reg', label:'Employé de jour — assignation régulière (EQ RELEVE)'}});
+        const pick = eqCandidates.find(c=>eqCount[c] < 3 && !isVacDay(c, u.dayIdx, w));
+        if(pick){
+          eqCount[pick]++;
+          assignments.push({...u, coveredBy: pick, result:{type:'reg', label:`Employé de jour — assignation régulière (EQ RELEVE ${pick})`}});
+        } else {
+          assignments.push({...u, coveredBy:null, result:{type:'gap', label:"Renfort de jour (H/I/J) déjà à son plafond de 3 relèves cette semaine — liste d'appel du secteur"}});
+        }
       }
     });
   }
