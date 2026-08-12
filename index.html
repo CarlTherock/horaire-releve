@@ -1797,11 +1797,11 @@ function runSimulation(){
     const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w, assignments));
     const rank = u.rank!==undefined ? u.rank : shiftRank(u.date, u.shift==='n');
     if(conf.accepted){
-      return {...u, coveredBy: conf.accepted, rank, result:{type:'ot', label:`Surtemps confirmé — ${conf.accepted} (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
+      return {...u, coveredBy: conf.accepted, rank, shiftKey, result:{type:'ot', label:`Surtemps confirmé — ${conf.accepted} (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
     }
     const allRefused = candidates.length>0 && candidates.every(c=>conf.refused.has(c));
     if(candidates.length===0 || allRefused){
-      return {...u, coveredBy: null, rank, result:{type:'gap', label:"Aucun volontaire pour le surtemps — liste d'appel du secteur (art. 8.01 f5/f7)"}};
+      return {...u, coveredBy: null, rank, shiftKey, result:{type:'gap', label:"Aucun volontaire pour le surtemps — liste d'appel du secteur (art. 8.01 f5/f7)"}};
     }
     return {...u, coveredBy: null, rank, shiftKey, otPending:true, result:{type:'ot', label:`Surtemps — en attente de confirmation (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
   }
@@ -1890,7 +1890,7 @@ function runSimulation(){
    Le surtemps n'est jamais obligatoire — on avance dans la liste tant que personne n'accepte. */
 function renderOtConfirmPanel(assignments, w){
   const panel = document.getElementById('otConfirmPanel');
-  const otShifts = assignments.filter(a=>a.result.type==='ot');
+  const otShifts = assignments.filter(a=>a.result.type==='ot' || (a.result.type==='gap' && a.shiftKey));
   if(otShifts.length===0){ panel.style.display='none'; panel.innerHTML=''; return; }
 
   const wasHidden = panel.style.display==='none' || panel.style.display==='';
@@ -1902,8 +1902,9 @@ function renderOtConfirmPanel(assignments, w){
     const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w, assignments));
     const dayLabel = DAY_LABELS[u.dayIdx] + ' ' + fmtDate(u.date,{day:'2-digit',month:'2-digit'});
     const shiftLabel = u.shift==='j' ? '7h–19h' : '19h–7h';
+    const noVolunteer = u.result.type==='gap';
     html += `<div class="ot-shift-block">
-      <div class="ot-shift-title"><b>${dayLabel} · ${shiftLabel}</b> — rang ${u.rank} (${RANK_LABELS[u.rank]}) — remplace ${u.who}</div>`;
+      <div class="ot-shift-title"><b>${dayLabel} · ${shiftLabel}</b> — rang ${u.rank} (${RANK_LABELS[u.rank]}) — remplace ${u.who}${noVolunteer?' <span style="color:var(--alert);">— aucun volontaire, liste d\'appel du secteur</span>':''}</div>`;
     let resolved = false;
     candidates.forEach((c,idx)=>{
       const isAccepted = conf.accepted===c;
