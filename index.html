@@ -316,6 +316,14 @@ tr:hover td.emp-col{background:#1a222d;}
   display:inline-block;border-radius:7px;padding:6px 4px;font-family:'JetBrains Mono',monospace;
   font-size:10.8px;line-height:1.5;font-weight:500;position:relative;
 }
+.orig-badge{
+  position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;
+  border:1.5px solid #0e131a;z-index:1;
+}
+.orig-badge-j{background:var(--jour);color:#241804;}
+.orig-badge-n{background:var(--nuit);color:#04121f;}
 .shift.j{background:var(--jour-dim);color:var(--jour);border:1px solid rgba(226,161,61,0.28);}
 .shift.n{background:var(--nuit-dim);color:var(--nuit);border:1px solid rgba(91,147,204,0.32);}
 .shift.jo{background:rgba(154,139,240,0.09);color:var(--jo);border:1px dashed rgba(154,139,240,0.35);}
@@ -588,7 +596,8 @@ footer a{color:var(--text-dim);}
   }
   .print-week-block .emp-role{ color:#7a8593; }
 
-  .print-week-block .shift{ border-width:1px; border-radius:5px; padding:4px 2px; font-size:9.5px; line-height:1.25; overflow:hidden; }
+  .print-week-block .shift{ border-width:1px; border-radius:5px; padding:4px 2px; font-size:9.5px; line-height:1.25; overflow:visible; }
+  .print-week-block .orig-badge{ position:static; display:inline-block; margin-right:3px; border-color:#fff; vertical-align:middle; }
   .print-week-block .shift .tag{
     font-size:8px; display:block; line-height:1.2;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
@@ -1018,6 +1027,24 @@ function joQuotaFor(code, w){
   }
   return Math.max(0, base - lost);
 }
+/* Le quart (J ou N) que cet employé aurait normalement occupé ce jour-là selon l'horaire maître
+   (ABCDG pour A-D-G, horaire maître Jo pour E/F), peu importe s'il est en vacances/congé/maladie
+   — sert à afficher un petit badge de rappel sur la case, indiquant ce qui doit être remplacé. */
+function originalShiftBadge(empCode, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  const day = week.days[dayIdx];
+  if(day.j===empCode) return 'j';
+  if(day.n===empCode) return 'n';
+  if(empCode==='E' || empCode==='F'){
+    const weekJo = REAL_JO_DEFAULT[ymd(week.start)];
+    if(weekJo && weekJo[empCode]){
+      const code = weekJo[empCode][dayIdx];
+      if(code==='j') return 'j';
+      if(code==='n') return 'n';
+    }
+  }
+  return null;
+}
 function vacatingCodesThisWeek(w){
   const week = w || WEEKS[weekIndex];
   const codes = new Set();
@@ -1245,9 +1272,10 @@ function baseCellStatus(empCode, dayIdx){
 
   if(isVacDay(empCode, dayIdx, w)){
     const t = vacType(empCode, dayIdx, w);
-    if(t==='vac') return {cls:'vac', hours:'Vacances', tag:null};
-    if(t==='maladie') return {cls:'maladie', hours:'Maladie', tag:null};
-    return {cls:'conge', hours:'Congé', tag:null};
+    const badge = originalShiftBadge(empCode, dayIdx, w);
+    if(t==='vac') return {cls:'vac', hours:'Vacances', tag:null, badge};
+    if(t==='maladie') return {cls:'maladie', hours:'Maladie', tag:null, badge};
+    return {cls:'conge', hours:'Congé', tag:null, badge};
   }
 
   // Réserviste (E/F/G) dont tous les jours JO réels sont malades cette semaine, en été : incapacité
@@ -1300,7 +1328,8 @@ function buildScheduleHTML(w, isReal){
       const canToggle = clickable && worksThisDay(emp.code, i, w);
       const t = truncTag(c.tag, 15);
       const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
-      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${c.hours}${tagHtml}</span></td>`;
+      const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
+      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${badgeHtml}${c.hours}${tagHtml}</span></td>`;
     });
     bodyHTML += `<tr>${cells}</tr>`;
   });
@@ -1335,12 +1364,13 @@ function renderDayView(){
     const c = computeCell(emp.code, currentDayIdx);
     const clickable = !isReal && emp.code!=='X' && worksThisDay(emp.code, currentDayIdx, w);
     const t = truncTag(c.tag, 28);
+    const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}" style="position:static;margin-right:6px;">${c.badge.toUpperCase()}</span>` : '';
     const div = document.createElement('div');
     div.className = 'day-card ' + c.cls + (clickable?' toggle-vac':'');
     div.innerHTML = `
       <span class="letter-chip">${emp.code}</span>
       <div class="info"><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="role">${emp.role}</div></div>
-      <div class="status"><span class="hours">${c.hours}</span>${c.tag?`<span class="tag">${t.short}</span>`:''}</div>
+      <div class="status">${badgeHtml}<span class="hours">${c.hours}</span>${c.tag?`<span class="tag">${t.short}</span>`:''}</div>
     `;
     if(clickable){
       div.title = 'Cliquer pour faire le cycle : normal → congé → maladie → normal';
