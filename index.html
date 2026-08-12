@@ -480,7 +480,7 @@ tr:hover td.emp-col{background:#1a222d;}
 }
 .ot-candidate-row.ot-current{background:rgba(242,193,78,0.1);border-color:rgba(242,193,78,0.5);}
 .ot-candidate-row.ot-accepted{background:rgba(79,174,126,0.1);border-color:rgba(79,174,126,0.5);}
-.ot-candidate-row.ot-refused{opacity:.45;}
+.ot-candidate-row.ot-refused{opacity:.75;}
 .ot-candidate-row.ot-waiting{opacity:.35;}
 .ot-candidate-row .rank-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim2);width:16px;}
 .ot-candidate-row .letter-chip{width:24px;height:24px;font-size:11px;flex:none;}
@@ -490,7 +490,7 @@ tr:hover td.emp-col{background:#1a222d;}
   font-size:13px;font-weight:700;flex:none;
 }
 .ot-status-icon.ok{background:rgba(79,174,126,0.25);color:var(--ok);}
-.ot-status-icon.no{background:rgba(224,100,95,0.25);color:var(--alert);}
+.ot-status-icon.no{background:rgba(224,100,95,0.55);color:#ffe4e2;}
 .ot-badge-accepted{
   font-family:'Oswald',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.02em;
   padding:8px 16px;border-radius:7px;text-transform:uppercase;
@@ -511,9 +511,11 @@ tr:hover td.emp-col{background:#1a222d;}
   50%{box-shadow:0 0 0 5px rgba(242,193,78,0);}
 }
 .ot-btn-reset{
-  font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim2);
-  background:none;border:none;cursor:pointer;text-decoration:underline;padding:2px 4px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:#e8ecf0;
+  background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);
+  border-radius:5px;cursor:pointer;padding:4px 8px;transition:.15s;
 }
+.ot-btn-reset:hover{background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.3);}
 .ladder-intro{flex:1;min-width:220px;}
 .ladder-intro p{font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:6px 0 0;}
 .ladder{
