@@ -1061,22 +1061,17 @@ function shiftsAdjacent(dayIdxA, shiftA, dayIdxB, shiftB){
 }
 /* Un candidat est éligible au surtemps pour ce quart s'il n'est pas en vacances/congé/maladie ce
    jour-là (une absence bloque toute la journée — J et N, pas seulement le quart habituel), ET si
-   accepter ce quart ne créerait pas 24h consécutives — ni avec son propre quart fixe (ABCDG pour
-   un titulaire, horaire maître Jo pour un réserviste), ni avec une absence (congé/maladie/vacances)
-   la veille ou le lendemain (la journée entière compte comme indisponible, pas juste le quart
-   d'origine), ni avec un autre quart de surtemps déjà accepté cette même semaine. */
+   accepter ce quart ne créerait pas 24h consécutives avec un vrai quart TRAVAILLÉ (ABCDG pour un
+   titulaire, horaire maître Jo pour un réserviste, ou un autre surtemps déjà accepté) la veille ou
+   le lendemain. Un congé/maladie un jour adjacent ne bloque PAS en soi le jour suivant/précédent —
+   n'étant pas au travail, il n'y a pas de fatigue réelle à faire respecter au-delà de sa propre
+   journée d'absence. */
 function otCandidateEligible(code, dayIdx, shiftType, w){
   if(isVacDay(code, dayIdx, w)) return false; // congé/maladie/vacances bloque toute la journée (J et N)
   const week = w || WEEKS[weekIndex];
   for(let i=0;i<7;i++){
-    // Blocage par quart fixe réel (ABCDG / horaire maître Jo)
     const badge = originalShiftBadge(code, i, week);
-    if(badge && shiftsAdjacent(dayIdx, shiftType, i, badge)) return false;
-    // Blocage par absence (congé/maladie/vacances) un jour adjacent : la journée entière compte,
-    // pas seulement son quart d'origine — ex. congé le jour → pas de surtemps la nuit du même jour.
-    if(isVacDay(code, i, week)){
-      if(shiftsAdjacent(dayIdx, shiftType, i, 'j') || shiftsAdjacent(dayIdx, shiftType, i, 'n')) return false;
-    }
+    if(badge && !isVacDay(code, i, week) && shiftsAdjacent(dayIdx, shiftType, i, badge)) return false;
   }
   const weekDateStrings = new Set(week.days.map(d=>ymd(d.date)));
   for(const key in otConfirmations){
