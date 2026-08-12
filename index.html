@@ -823,12 +823,14 @@ const EMPLOYEES = [
   {code:"C", role:"Titulaire"}, {code:"D", role:"Titulaire"},
   {code:"E", role:"Réserviste (Jo)"}, {code:"F", role:"Réserviste (Jo)"},
   {code:"G", role:"Titulaire 0,5 + Jo"},
-  {code:"X", role:"Renfort de jour (au besoin)"}
+  {code:"H", role:"Renfort de jour (au besoin)"},
+  {code:"I", role:"Renfort de jour (au besoin)"},
+  {code:"J", role:"Renfort de jour (au besoin)"}
 ];
 const REAL_NAMES = {
   A:"Beaudette, Thierry", B:"Spooner, Alain", C:"Bruneau, David",
   D:"Roy, François", G:"Desrochers, Carl", F:"Lachance, Loïc",
-  E:"Lapierre, Frédéric", X:"Bonenfant, Alexis"
+  E:"Lapierre, Frédéric", H:"Bonenfant, Alexis"
 };
 
 /* Ordre d'ancienneté de métier (du plus ancien au plus jeune) — utilisé pour l'offre de surtemps.
@@ -948,7 +950,7 @@ const REAL_WEEK_CELLS = {
   "B|5":{cls:"j",hours:"7:00–19:00",tag:null},
   "B|6":{cls:"j",hours:"7:00–19:00",tag:null},
 
-  "X|3":{cls:"eq",hours:"7:00–19:00",tag:"EQ RELEVE/ELEC INSTR REL USINE · WI ENT REL 12 7"}
+  "H|3":{cls:"eq",hours:"7:00–19:00",tag:"EQ RELEVE/ELEC INSTR REL USINE · WI ENT REL 12 7"}
 };
 
 function isoWeekNumber(d){
@@ -1292,7 +1294,7 @@ function computeCell(empCode, dayIdx){
     }
   }
 
-  if(empCode==='X') return {cls:'off', hours:'—', tag:null};
+  if(['H','I','J'].includes(empCode)) return {cls:'off', hours:'—', tag:null};
 
   // Le quart de cet employé absent attend une confirmation de surtemps (pas encore acceptée par
   // personne) : on le signale directement sur sa propre case avec un petit repère "?", sans
@@ -1374,7 +1376,7 @@ function buildScheduleHTML(w, isReal){
   let bodyHTML = '';
   EMPLOYEES.forEach(emp=>{
     let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
-    const clickable = !isReal && emp.code!=='X';
+    const clickable = !isReal && !['H','I','J'].includes(emp.code);
     w.days.forEach((day,i)=>{
       const c = computeCell(emp.code, i);
       const canToggle = clickable && worksThisDay(emp.code, i, w);
@@ -1414,7 +1416,7 @@ function renderDayView(){
   cards.innerHTML = '';
   EMPLOYEES.forEach(emp=>{
     const c = computeCell(emp.code, currentDayIdx);
-    const clickable = !isReal && emp.code!=='X' && worksThisDay(emp.code, currentDayIdx, w);
+    const clickable = !isReal && !['H','I','J'].includes(emp.code) && worksThisDay(emp.code, currentDayIdx, w);
     const t = truncTag(c.tag, 28);
     const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}" style="position:static;margin-right:6px;">${c.badge.toUpperCase()}</span>` : '';
     const div = document.createElement('div');
@@ -1782,7 +1784,7 @@ function runSimulation(){
       if(idx<2){
         assignments.push(resolveOt(u));
       } else {
-        assignments.push({...u, coveredBy: 'X', result:{type:'reg', label:'Employé de jour — assignation régulière (EQ RELEVE)'}});
+        assignments.push({...u, coveredBy: 'H', result:{type:'reg', label:'Employé de jour — assignation régulière (EQ RELEVE)'}});
       }
     });
   }
