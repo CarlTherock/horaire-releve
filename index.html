@@ -545,6 +545,17 @@ tr:hover td.emp-col{background:#1a222d;}
   display:flex;align-items:center;gap:10px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:8px;padding:8px 10px;
 }
+.name-edit-row{
+  display:flex;align-items:center;gap:8px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+}
+.name-edit-row input{
+  flex:1;min-width:0;background:var(--panel-3);border:1px solid var(--line);border-radius:6px;
+  color:var(--text);font-family:'Oswald',sans-serif;font-size:13px;padding:6px 8px;
+}
+.name-edit-row input:focus{outline:none;border-color:#5a7a9a;}
+.name-edit-row input::placeholder{color:var(--text-dim2);font-style:italic;}
+.name-edit-row .name-role{font-size:9.5px;color:var(--text-dim2);font-family:'JetBrains Mono',monospace;flex:none;max-width:80px;}
 .seniority-row .rank-num{
   font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim2);
   width:20px;flex:none;text-align:center;
@@ -756,6 +767,12 @@ footer a{color:var(--text-dim);}
       <div class="ladder" id="ladder"></div>
     </div>
 
+    <div class="names-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
+      <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Paramètres — Noms des employés</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">Modifiez le nom associé à chaque lettre. Pour H, I, J (renfort de jour) : laissez vide pour les garder masqués partout dans l'outil — dès qu'un nom est inscrit, la lettre apparaît dans la grille et les autres panneaux.</p>
+      <div id="namesEditor" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;"></div>
+    </div>
+
     <div class="seniority-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
       <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Paramètres — Ordre d'ancienneté (surtemps)</h2>
       <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">La lettre (A à G) ne reflète pas l'ancienneté réelle — ce n'est qu'une position sur l'horaire maître. Classez ici l'ordre d'ancienneté du plus ancien (haut) au plus jeune (bas) : c'est cet ordre, et non l'ordre E-F-G, qui détermine qui se voit offrir les 2 quarts de surtemps.</p>
@@ -827,11 +844,16 @@ const EMPLOYEES = [
   {code:"I", role:"Renfort de jour (au besoin)"},
   {code:"J", role:"Renfort de jour (au besoin)"}
 ];
-const REAL_NAMES = {
+let REAL_NAMES = {
   A:"Beaudette, Thierry", B:"Spooner, Alain", C:"Bruneau, David",
   D:"Roy, François", G:"Desrochers, Carl", F:"Lachance, Loïc",
   E:"Lapierre, Frédéric", H:"Bonenfant, Alexis"
 };
+/* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que si on leur
+   a assigné un nom — tant qu'ils sont anonymes, ils restent masqués pour ne pas encombrer l'outil. */
+function activeEmployees(){
+  return EMPLOYEES.filter(emp => !['H','I','J'].includes(emp.code) || (REAL_NAMES[emp.code] && REAL_NAMES[emp.code].trim()));
+}
 
 /* Ordre d'ancienneté de métier (du plus ancien au plus jeune) — utilisé pour l'offre de surtemps.
    Modifiable directement dans l'outil (section « Paramètres — Ancienneté ») : la lettre ABCDG
@@ -1135,7 +1157,8 @@ function saveState(){
       showReal, viewMode, currentDayIdx, seniorityOrder,
       vacDays: Array.from(vacDays.entries()),
       unavailableJo: Array.from(unavailableJo),
-      otConfirmations: otConfSerializable
+      otConfirmations: otConfSerializable,
+      realNames: REAL_NAMES
     }));
   }catch(e){}
 }
@@ -1151,6 +1174,9 @@ function loadState(){
     if(typeof s.showReal==='boolean') showReal = s.showReal;
     if(s.viewMode==='grid' || s.viewMode==='day') viewMode = s.viewMode;
     if(Number.isInteger(s.currentDayIdx) && s.currentDayIdx>=0 && s.currentDayIdx<=6) currentDayIdx = s.currentDayIdx;
+    if(s.realNames && typeof s.realNames==='object'){
+      REAL_NAMES = s.realNames;
+    }
     if(Array.isArray(s.seniorityOrder) && s.seniorityOrder.length===seniorityOrder.length
        && s.seniorityOrder.every(c=>seniorityOrder.includes(c))){
       seniorityOrder = s.seniorityOrder;
@@ -1374,7 +1400,7 @@ function buildScheduleHTML(w, isReal){
   }).join('');
 
   let bodyHTML = '';
-  EMPLOYEES.forEach(emp=>{
+  activeEmployees().forEach(emp=>{
     let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
     const clickable = !isReal && !['H','I','J'].includes(emp.code);
     w.days.forEach((day,i)=>{
@@ -1414,7 +1440,7 @@ function renderDayView(){
 
   const cards = document.getElementById('dayCards');
   cards.innerHTML = '';
-  EMPLOYEES.forEach(emp=>{
+  activeEmployees().forEach(emp=>{
     const c = computeCell(emp.code, currentDayIdx);
     const clickable = !isReal && !['H','I','J'].includes(emp.code) && worksThisDay(emp.code, currentDayIdx, w);
     const t = truncTag(c.tag, 28);
@@ -1459,6 +1485,30 @@ function renderSeniorityList(){
       if(idx<seniorityOrder.length-1){ [seniorityOrder[idx+1],seniorityOrder[idx]] = [seniorityOrder[idx],seniorityOrder[idx+1]]; renderSeniorityList(); saveState(); }
     };
     list.appendChild(row);
+  });
+}
+
+/* Panneau d'édition des noms (A-J). H, I, J : un champ vide les garde masqués partout dans
+   l'outil (grille, vue Jour, impression) — dès qu'un nom est inscrit, la lettre redevient visible. */
+function renderNamesEditor(){
+  const editor = document.getElementById('namesEditor');
+  editor.innerHTML = '';
+  EMPLOYEES.forEach(emp=>{
+    const row = document.createElement('div');
+    row.className = 'name-edit-row';
+    const isOptional = ['H','I','J'].includes(emp.code);
+    row.innerHTML = `
+      <span class="letter-chip">${emp.code}</span>
+      <input type="text" value="${(REAL_NAMES[emp.code]||'').replace(/"/g,'&quot;')}" placeholder="${isOptional?'Nom (laisser vide = masqué)':'Nom, Prénom'}">
+      <span class="name-role">${emp.role.split('(')[0].trim()}</span>
+    `;
+    const input = row.querySelector('input');
+    input.oninput = ()=>{
+      const v = input.value.trim();
+      if(v) REAL_NAMES[emp.code] = v; else delete REAL_NAMES[emp.code];
+      refreshAll();
+    };
+    editor.appendChild(row);
   });
 }
 
@@ -1992,7 +2042,7 @@ function renderSummary(){
   const thu = addDays(w.start,-3);
   const status = today >= thu ? 'Publié' : 'En attente de gel';
 
-  EMPLOYEES.forEach(emp=>{
+  activeEmployees().forEach(emp=>{
     let jCount=0,nCount=0,weekendCount=0;
     w.days.forEach((day,i)=>{
       if(emp.code!=='E' && emp.code!=='F'){
@@ -2141,6 +2191,7 @@ document.getElementById('nextDay').onclick = ()=>{
 
 refreshAll();
 renderSeniorityList();
+renderNamesEditor();
 if(viewMode==='day'){
   document.getElementById('viewDayBtn').classList.add('active');
   document.getElementById('viewGridBtn').classList.remove('active');
