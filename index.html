@@ -484,14 +484,19 @@ tr:hover td.emp-col{background:#1a222d;}
 .ot-status-icon.ok{background:rgba(79,174,126,0.25);color:var(--ok);}
 .ot-status-icon.no{background:rgba(224,100,95,0.25);color:var(--alert);}
 .ot-btn{
-  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.03em;
-  padding:5px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--line);
-  background:var(--panel-3);color:var(--text-dim);transition:.15s;
+  font-family:'Oswald',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.02em;
+  padding:8px 16px;border-radius:7px;cursor:pointer;border:none;transition:.15s;
+  text-transform:uppercase;
 }
-.ot-btn.ot-accept{border-color:rgba(79,174,126,0.5);color:var(--ok);}
-.ot-btn.ot-accept:hover{background:rgba(79,174,126,0.15);}
-.ot-btn.ot-refuse{border-color:rgba(224,100,95,0.5);color:var(--alert);}
-.ot-btn.ot-refuse:hover{background:rgba(224,100,95,0.15);}
+.ot-btn.ot-accept{background:var(--ok);color:#08301c;box-shadow:0 2px 8px rgba(79,174,126,0.5);}
+.ot-btn.ot-accept:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:0 3px 10px rgba(79,174,126,0.65);}
+.ot-btn.ot-refuse{background:var(--alert);color:#3a0d0a;box-shadow:0 2px 8px rgba(224,100,95,0.5);}
+.ot-btn.ot-refuse:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:0 3px 10px rgba(224,100,95,0.65);}
+.ot-candidate-row.ot-current{animation:ot-pulse 1.8s ease-in-out infinite;}
+@keyframes ot-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(242,193,78,0.35);}
+  50%{box-shadow:0 0 0 5px rgba(242,193,78,0);}
+}
 .ot-btn-reset{
   font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim2);
   background:none;border:none;cursor:pointer;text-decoration:underline;padding:2px 4px;
@@ -1210,6 +1215,18 @@ function computeCell(empCode, dayIdx){
 
   if(empCode==='X') return {cls:'off', hours:'—', tag:null};
 
+  // Le quart de cet employé absent attend une confirmation de surtemps (pas encore acceptée par
+  // personne) : on le signale directement sur sa propre case avec un petit repère "?", sans
+  // écraser son statut réel (Vacances/Congé/Maladie). Une fois confirmé, ce repère disparaît —
+  // le détail complet (qui comble, avec quel rang) reste dans le panneau de résultats.
+  if(simResult){
+    const pendingAsWho = simResult.find(a=>a.who===empCode && a.dayIdx===dayIdx && a.result.type==='ot' && a.otPending);
+    if(pendingAsWho){
+      const base = baseCellStatus(empCode, dayIdx);
+      return {...base, tag: '❓ Surtemps en attente de confirmation'};
+    }
+  }
+
   // Remarque : la case de l'employé ABSENT (celui qui a déclenché le comblement) ne doit PAS être
   // écrasée par le résultat de la simulation — elle doit continuer d'afficher son statut réel
   // (Vacances / Congé / Maladie) via baseCellStatus, peu importe qui le remplace. Le détail du
@@ -1712,6 +1729,7 @@ function renderOtConfirmPanel(assignments, w){
   const otShifts = assignments.filter(a=>a.result.type==='ot');
   if(otShifts.length===0){ panel.style.display='none'; panel.innerHTML=''; return; }
 
+  const wasHidden = panel.style.display==='none' || panel.style.display==='';
   panel.style.display = 'block';
   let html = `<div class="ot-confirm-box"><h3>📋 Confirmation du surtemps — offert par ancienneté (non obligatoire)</h3>`;
   otShifts.forEach(u=>{
@@ -1776,6 +1794,10 @@ function renderOtConfirmPanel(assignments, w){
       runSimulation();
     };
   });
+
+  if(wasHidden){
+    setTimeout(()=> panel.scrollIntoView({behavior:'smooth', block:'center'}), 60);
+  }
 }
 
 function renderResultBox(assignments, vac, specialRuleCount, stats, sickReservistSummer){
@@ -1934,13 +1956,18 @@ document.getElementById('resetWeekSim').onclick = ()=>{
   const weekDates = new Set(w.days.map(d=>ymd(d.date)));
   Array.from(vacDays.keys()).forEach(key=>{ if(weekDates.has(key.split('|')[1])) vacDays.delete(key); });
   Array.from(unavailableJo).forEach(key=>{ if(weekDates.has(key.split('|')[1])) unavailableJo.delete(key); });
+  Object.keys(otConfirmations).forEach(key=>{ if(weekDates.has(key.split(':')[0])) delete otConfirmations[key]; });
   simResult = null;
   document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
+  const panel = document.getElementById('otConfirmPanel');
+  panel.style.display = 'none'; panel.innerHTML = '';
   refreshAll();
 };
 document.getElementById('resetAllSim').onclick = ()=>{
   vacDays=new Map(); unavailableJo=new Set(); simResult=null; otConfirmations={};
   document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
+  const panel = document.getElementById('otConfirmPanel');
+  panel.style.display = 'none'; panel.innerHTML = '';
   refreshAll();
 };
 
