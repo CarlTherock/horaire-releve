@@ -448,7 +448,53 @@ tr:hover td.emp-col{background:#1a222d;}
 
 /* ===== LADDER (signature element) ===== */
 .ladder-wrap{
-  display:flex;gap:16px;align-items:stretch;padding:16px 18px 18px;
+  display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;padding:16px 18px 18px;
+}
+#otConfirmPanel{flex-basis:100%;width:100%;}
+.ot-confirm-box{
+  background:rgba(242,193,78,0.06);border:1px solid rgba(242,193,78,0.35);
+  border-radius:10px;padding:14px 16px;margin-bottom:4px;
+}
+.ot-confirm-box h3{
+  font-family:'Oswald',sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--ot);margin:0 0 10px;display:flex;align-items:center;gap:8px;
+}
+.ot-shift-block{margin-bottom:14px;}
+.ot-shift-block:last-child{margin-bottom:0;}
+.ot-shift-title{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);
+  margin-bottom:6px;letter-spacing:.02em;
+}
+.ot-shift-title b{color:var(--text);font-family:'Oswald',sans-serif;font-size:12.5px;}
+.ot-candidate-row{
+  display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;
+  background:var(--panel-2);border:1px solid var(--line);margin-bottom:4px;
+}
+.ot-candidate-row.ot-current{background:rgba(242,193,78,0.1);border-color:rgba(242,193,78,0.5);}
+.ot-candidate-row.ot-accepted{background:rgba(79,174,126,0.1);border-color:rgba(79,174,126,0.5);}
+.ot-candidate-row.ot-refused{opacity:.45;}
+.ot-candidate-row.ot-waiting{opacity:.35;}
+.ot-candidate-row .rank-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim2);width:16px;}
+.ot-candidate-row .letter-chip{width:24px;height:24px;font-size:11px;flex:none;}
+.ot-candidate-row .ot-cand-name{font-family:'Oswald',sans-serif;font-size:13px;flex:1;color:var(--text);}
+.ot-status-icon{
+  width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;flex:none;
+}
+.ot-status-icon.ok{background:rgba(79,174,126,0.25);color:var(--ok);}
+.ot-status-icon.no{background:rgba(224,100,95,0.25);color:var(--alert);}
+.ot-btn{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.03em;
+  padding:5px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--line);
+  background:var(--panel-3);color:var(--text-dim);transition:.15s;
+}
+.ot-btn.ot-accept{border-color:rgba(79,174,126,0.5);color:var(--ok);}
+.ot-btn.ot-accept:hover{background:rgba(79,174,126,0.15);}
+.ot-btn.ot-refuse{border-color:rgba(224,100,95,0.5);color:var(--alert);}
+.ot-btn.ot-refuse:hover{background:rgba(224,100,95,0.15);}
+.ot-btn-reset{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim2);
+  background:none;border:none;cursor:pointer;text-decoration:underline;padding:2px 4px;
 }
 .ladder-intro{flex:1;min-width:220px;}
 .ladder-intro p{font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:6px 0 0;}
@@ -681,6 +727,7 @@ footer a{color:var(--text-dim);}
     </div>
 
     <div class="ladder-wrap" style="border-top:1px solid var(--line);">
+      <div id="otConfirmPanel" style="display:none;"></div>
       <div class="ladder-intro">
         <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0;">Échelle des pires quarts</h2>
         <p>Classement du moins pire (bas) au plus pire (haut), utilisé pour prioriser l'offre de surtemps lorsque 2 titulaires sont en vacances simultanément. Les rangs s'allument selon les quarts non couverts détectés par la simulation.</p>
@@ -977,6 +1024,10 @@ function vacatingCodesThisWeek(w){
   return Array.from(codes);
 }
 let unavailableJo = new Set();
+/* État des demandes de surtemps (non obligatoire — la relève peut refuser) : clé "YYYY-MM-DD:j|n"
+   -> {refused:Set(codes), accepted:code|null}. Persiste tant qu'on ne relance pas une nouvelle
+   sélection de vacances/absences (reset avec la simulation). */
+let otConfirmations = {};
 let simResult = null;
 let viewMode = 'grid'; // 'grid' | 'day'
 let currentDayIdx = 0;
@@ -989,11 +1040,16 @@ let currentDayIdx = 0;
 const STORAGE_KEY = 'horaire-releve-state-v1';
 function saveState(){
   try{
+    const otConfSerializable = {};
+    Object.keys(otConfirmations).forEach(k=>{
+      otConfSerializable[k] = {refused: Array.from(otConfirmations[k].refused), accepted: otConfirmations[k].accepted};
+    });
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       weekStart: ymd(WEEKS[weekIndex].start),
       showReal, viewMode, currentDayIdx, seniorityOrder,
       vacDays: Array.from(vacDays.entries()),
-      unavailableJo: Array.from(unavailableJo)
+      unavailableJo: Array.from(unavailableJo),
+      otConfirmations: otConfSerializable
     }));
   }catch(e){}
 }
@@ -1015,6 +1071,13 @@ function loadState(){
     }
     if(Array.isArray(s.vacDays)) vacDays = new Map(s.vacDays);
     if(Array.isArray(s.unavailableJo)) unavailableJo = new Set(s.unavailableJo);
+    if(s.otConfirmations && typeof s.otConfirmations==='object'){
+      otConfirmations = {};
+      Object.keys(s.otConfirmations).forEach(k=>{
+        const v = s.otConfirmations[k];
+        otConfirmations[k] = {refused: new Set(Array.isArray(v.refused)?v.refused:[]), accepted: v.accepted||null};
+      });
+    }
   }catch(e){}
 }
 loadState();
@@ -1315,7 +1378,7 @@ function toggleVacDay(code, dayIdx, w, type){
     else vacDays.delete(key);
   }
   simResult = null;
-  renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+  renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]); document.getElementById('otConfirmPanel').style.display='none';
   document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
   saveState();
 }
@@ -1373,7 +1436,7 @@ function renderChips(){
         if(nowAllVac) vacDays.delete(key); else vacDays.set(key, 'vac');
       });
       simResult = null;
-      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]); document.getElementById('otConfirmPanel').style.display='none';
       document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
       saveState();
     };
@@ -1384,7 +1447,7 @@ function renderChips(){
         if(nowAllMaladie) vacDays.delete(key); else vacDays.set(key, 'maladie');
       });
       simResult = null;
-      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]); document.getElementById('otConfirmPanel').style.display='none';
       document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
       saveState();
     };
@@ -1400,7 +1463,7 @@ function renderChips(){
         if(nextType===null) vacDays.delete(key); else vacDays.set(key, nextType);
       });
       simResult = null;
-      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]);
+      renderChips(); renderTable(); renderDayView(); renderJoStat(); renderLadder([]); document.getElementById('otConfirmPanel').style.display='none';
       document.getElementById('resultBox').innerHTML = '<div class="placeholder">Sélection modifiée — relancez la simulation pour voir le comblement à jour.</div>';
       saveState();
     };
@@ -1555,6 +1618,25 @@ function runSimulation(){
 
   let assignments = [];
 
+  // Le surtemps n'est jamais obligatoire : on l'offre par ancienneté, un(e) à la fois, et on
+  // attend une confirmation (acceptée/refusée) avant de considérer le quart comblé. Tant que
+  // personne n'a accepté, le quart reste "en attente" — voir le tableau de confirmation dynamique.
+  function resolveOt(u, extraNote){
+    const shiftKey = ymd(u.date)+':'+u.shift;
+    if(!otConfirmations[shiftKey]) otConfirmations[shiftKey] = {refused:new Set(), accepted:null};
+    const conf = otConfirmations[shiftKey];
+    const candidates = seniorityOrder.filter(c=>!isVacDay(c, u.dayIdx, w));
+    const rank = u.rank!==undefined ? u.rank : shiftRank(u.date, u.shift==='n');
+    if(conf.accepted){
+      return {...u, coveredBy: conf.accepted, rank, result:{type:'ot', label:`Surtemps confirmé — ${conf.accepted} (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
+    }
+    const allRefused = candidates.length>0 && candidates.every(c=>conf.refused.has(c));
+    if(candidates.length===0 || allRefused){
+      return {...u, coveredBy: null, rank, result:{type:'gap', label:"Aucun volontaire pour le surtemps — liste d'appel du secteur (art. 8.01 f5/f7)"}};
+    }
+    return {...u, coveredBy: null, rank, shiftKey, otPending:true, result:{type:'ot', label:`Surtemps — en attente de confirmation (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
+  }
+
   // Un réserviste (E, F ou G) dont TOUS les jours JO de la semaine sont marqués "Maladie", durant
   // la période estivale, crée une pénurie de comblement équivalente à 2 employés de relève en
   // vacances simultanément : on applique donc la même règle spéciale (max 2 quarts en surtemps
@@ -1578,19 +1660,8 @@ function runSimulation(){
     });
     stillOpenSimple = stillOpenSimple.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
     stillOpenSimple.sort((a,b)=>b.rank-a.rank || a.dayIdx-b.dayIdx);
-    let otIdxSimple = 0;
     stillOpenSimple.forEach(u=>{
-      let candidate = null;
-      while(otIdxSimple < seniorityOrder.length){
-        const c = seniorityOrder[otIdxSimple];
-        otIdxSimple++;
-        if(!isVacDay(c, u.dayIdx, w)){ candidate = c; break; }
-      }
-      if(candidate){
-        assignments.push({...u, coveredBy: candidate, result:{type:'ot', label:`Surtemps — ${candidate} (ancienneté, pénurie de JO) — rang ${u.rank} (${RANK_LABELS[u.rank]})`}});
-      } else {
-        assignments.push({...u, coveredBy: null, result:{type:'gap', label:"Aucun Jo ni volontaire disponible — liste d'appel du secteur (art. 8.01 f5/f7)"}});
-      }
+      assignments.push(resolveOt(u, 'pénurie de JO'));
     });
   } else {
     // Règle spéciale : 2 employés de relève (A à G, pas seulement A-D) simultanément en vacances,
@@ -1608,19 +1679,9 @@ function runSimulation(){
     // Classement des quarts restants par rang (pires quarts) — les 2 moins pires en surtemps
     stillOpen = stillOpen.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
     stillOpen.sort((a,b)=>a.rank-b.rank);
-    // Le surtemps est offert par ANCIENNETÉ (pas par l'ordre E-F-G, réservé au comblement normal).
-    // Chaque candidat est vérifié pour LE JOUR précis du quart à combler (pas toute la semaine).
-    let otIdx = 0;
     stillOpen.forEach((u,idx)=>{
       if(idx<2){
-        let candidate = null;
-        while(otIdx < seniorityOrder.length){
-          const c = seniorityOrder[otIdx];
-          otIdx++;
-          if(!isVacDay(c, u.dayIdx, w)){ candidate = c; break; }
-        }
-        const who = candidate ? `${candidate}` : 'relève (à déterminer)';
-        assignments.push({...u, coveredBy: candidate, result:{type:'ot', label:`Surtemps — ${who} (ancienneté) — rang ${u.rank} (${RANK_LABELS[u.rank]})`}});
+        assignments.push(resolveOt(u));
       } else {
         assignments.push({...u, coveredBy: 'X', result:{type:'reg', label:'Employé de jour — assignation régulière (EQ RELEVE)'}});
       }
@@ -1640,6 +1701,81 @@ function runSimulation(){
   renderDayView();
   renderJoStat();
   renderLadder(assignments.filter(a=>a.result.type==='ot' || a.result.type==='reg' || a.result.type==='gap'));
+  renderOtConfirmPanel(assignments, w);
+}
+
+/* Tableau dynamique de confirmation du surtemps (apparaît seulement s'il y a un quart en attente) :
+   liste les candidats par ordre d'ancienneté pour chaque quart à combler, avec accepter/refuser.
+   Le surtemps n'est jamais obligatoire — on avance dans la liste tant que personne n'accepte. */
+function renderOtConfirmPanel(assignments, w){
+  const panel = document.getElementById('otConfirmPanel');
+  const otShifts = assignments.filter(a=>a.result.type==='ot');
+  if(otShifts.length===0){ panel.style.display='none'; panel.innerHTML=''; return; }
+
+  panel.style.display = 'block';
+  let html = `<div class="ot-confirm-box"><h3>📋 Confirmation du surtemps — offert par ancienneté (non obligatoire)</h3>`;
+  otShifts.forEach(u=>{
+    const shiftKey = ymd(u.date)+':'+u.shift;
+    const conf = otConfirmations[shiftKey] || {refused:new Set(), accepted:null};
+    const candidates = seniorityOrder.filter(c=>!isVacDay(c, u.dayIdx, w));
+    const dayLabel = DAY_LABELS[u.dayIdx] + ' ' + fmtDate(u.date,{day:'2-digit',month:'2-digit'});
+    const shiftLabel = u.shift==='j' ? '7h–19h' : '19h–7h';
+    html += `<div class="ot-shift-block">
+      <div class="ot-shift-title"><b>${dayLabel} · ${shiftLabel}</b> — rang ${u.rank} (${RANK_LABELS[u.rank]}) — remplace ${u.who}</div>`;
+    let resolved = false;
+    candidates.forEach((c,idx)=>{
+      const isAccepted = conf.accepted===c;
+      const isRefused = conf.refused.has(c);
+      const isCurrent = !conf.accepted && !isRefused && !resolved;
+      if(isCurrent) resolved = true; // le prochain non-refusé après celui-ci est "en attente"
+      let rowClass = 'ot-candidate-row';
+      if(isAccepted) rowClass += ' ot-accepted';
+      else if(isRefused) rowClass += ' ot-refused';
+      else if(isCurrent) rowClass += ' ot-current';
+      else rowClass += ' ot-waiting';
+      const name = REAL_NAMES[c] ? REAL_NAMES[c].split(',')[0] : c;
+      html += `<div class="${rowClass}">
+        <span class="rank-num">${idx+1}</span>
+        <span class="letter-chip">${c}</span>
+        <span class="ot-cand-name">${name}</span>`;
+      if(isAccepted){
+        html += `<span class="ot-status-icon ok">✓</span><button class="ot-btn-reset" data-reset="${shiftKey}">annuler</button>`;
+      } else if(isRefused){
+        html += `<span class="ot-status-icon no">✕</span>`;
+      } else if(isCurrent && !conf.accepted){
+        html += `<button class="ot-btn ot-accept" data-shift="${shiftKey}" data-code="${c}" data-action="accept">✓ Accepte</button>
+                  <button class="ot-btn ot-refuse" data-shift="${shiftKey}" data-code="${c}" data-action="refuse">✕ Refuse</button>`;
+      } else {
+        html += `<span style="width:24px;"></span>`;
+      }
+      html += `</div>`;
+    });
+    if(candidates.length===0){
+      html += `<div class="ot-candidate-row"><span class="ot-cand-name" style="color:var(--alert);">Aucun candidat disponible cette semaine</span></div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div>`;
+  panel.innerHTML = html;
+
+  panel.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.dataset.shift, code = btn.dataset.code, action = btn.dataset.action;
+      if(!otConfirmations[key]) otConfirmations[key] = {refused:new Set(), accepted:null};
+      if(action==='accept') otConfirmations[key].accepted = code;
+      else otConfirmations[key].refused.add(code);
+      saveState();
+      runSimulation();
+    };
+  });
+  panel.querySelectorAll('[data-reset]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.dataset.reset;
+      if(otConfirmations[key]) otConfirmations[key].accepted = null;
+      saveState();
+      runSimulation();
+    };
+  });
 }
 
 function renderResultBox(assignments, vac, specialRuleCount, stats, sickReservistSummer){
@@ -1803,7 +1939,7 @@ document.getElementById('resetWeekSim').onclick = ()=>{
   refreshAll();
 };
 document.getElementById('resetAllSim').onclick = ()=>{
-  vacDays=new Map(); unavailableJo=new Set(); simResult=null;
+  vacDays=new Map(); unavailableJo=new Set(); simResult=null; otConfirmations={};
   document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
   refreshAll();
 };
