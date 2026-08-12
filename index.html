@@ -1843,6 +1843,9 @@ function renderOtConfirmPanel(assignments, w){
         html += `<span class="ot-badge-accepted">✓ ACCEPTÉ</span><button class="ot-btn-reset" data-reset="${shiftKey}">annuler</button>`;
       } else if(isRefused){
         html += `<span class="ot-status-icon no">✕</span>`;
+        if(!conf.accepted){
+          html += `<button class="ot-btn-reset" data-unrefuse="${shiftKey}" data-code="${c}">annuler</button>`;
+        }
       } else if(isCurrent && !conf.accepted){
         html += `<button class="ot-btn ot-accept" data-shift="${shiftKey}" data-code="${c}" data-action="accept">✓ Accepte</button>
                   <button class="ot-btn ot-refuse" data-shift="${shiftKey}" data-code="${c}" data-action="refuse">✕ Refuse</button>`;
@@ -1873,6 +1876,14 @@ function renderOtConfirmPanel(assignments, w){
     btn.onclick = ()=>{
       const key = btn.dataset.reset;
       if(otConfirmations[key]) otConfirmations[key].accepted = null;
+      saveState();
+      runSimulation();
+    };
+  });
+  panel.querySelectorAll('[data-unrefuse]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.dataset.unrefuse, code = btn.dataset.code;
+      if(otConfirmations[key]) otConfirmations[key].refused.delete(code);
       saveState();
       runSimulation();
     };
