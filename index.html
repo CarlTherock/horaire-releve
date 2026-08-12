@@ -932,6 +932,15 @@ function reservistFullyMaladieThisWeek(code, w){
   if(joDays.length===0) return false;
   return joDays.every(i => vacType(code, i, week)==='maladie');
 }
+/* Quota hebdomadaire de comblement d'un Jo (E/F/G) = son nombre de JO réels cette semaine-là
+   (jamais plus de 4). Fonction partagée par le moteur de simulation et par l'affichage de la
+   grille (pour savoir si son quota est déjà épuisé ailleurs cette semaine-là). */
+function joQuotaFor(code, w){
+  const week = w || WEEKS[weekIndex];
+  const weekJo = REAL_JO_DEFAULT[ymd(week.start)];
+  if(weekJo && weekJo[code]) return [...weekJo[code]].filter(c=>c==='o').length;
+  return 4; // semaine hors table source : repli sur le maximum structurel (4/semaine)
+}
 function vacatingCodesThisWeek(w){
   const week = w || WEEKS[weekIndex];
   const codes = new Set();
@@ -1097,6 +1106,16 @@ function computeCell(empCode, dayIdx){
       else if(coverAssignment.result.type==='reg') label = `Renfort de jour — comble ${coverAssignment.who}`;
       else label = `Jo — comble ${coverAssignment.who}`;
       return {cls, hours, tag: label};
+    }
+    // 2) Ce Jo (E/F/G) a déjà épuisé tout son quota hebdomadaire ailleurs cette semaine-là (ex.
+    //    en empruntant des jours hors-JO) : ses jours JO officiels non utilisés n'ont plus de
+    //    disponibilité réelle à offrir — affichage vide plutôt que "JO disponible" trompeur.
+    if(['E','F','G'].includes(empCode)){
+      const usedCount = simResult.filter(a=>a.coveredBy===empCode).length;
+      if(usedCount >= joQuotaFor(empCode, w)){
+        const base = baseCellStatus(empCode, dayIdx);
+        if(base.cls==='jo') return {cls:'off', hours:'—', tag:null};
+      }
     }
   }
 
@@ -1436,11 +1455,7 @@ function runSimulation(){
   // jamais moins que ce que montre son horaire maître). Une fois son quota atteint, on passe au
   // suivant (E→F→G) — même en empruntant un jour hors-JO, un Jo ne fait jamais plus de remplacements
   // que son nombre de JO réel cette semaine-là.
-  function joQuota(code){
-    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
-    if(weekJo && weekJo[code]) return [...weekJo[code]].filter(c=>c==='o').length;
-    return 4; // semaine hors table source : repli sur le maximum structurel (4/semaine)
-  }
+  function joQuota(code){ return joQuotaFor(code, w); }
   const assignedCount = {E:0, F:0, G:0};
   // Suivi des quarts déjà occupés par chaque Jo (assignations de comblement + leurs propres quarts
   // fixes ABCDG/horaire maître) — sert à empêcher un Jo d'enchaîner deux quarts consécutifs
