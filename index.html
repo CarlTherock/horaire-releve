@@ -849,10 +849,18 @@ let REAL_NAMES = {
   D:"Roy, François", G:"Desrochers, Carl", F:"Lachance, Loïc",
   E:"Lapierre, Frédéric", H:"Bonenfant, Alexis"
 };
-/* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que si on leur
-   a assigné un nom — tant qu'ils sont anonymes, ils restent masqués pour ne pas encombrer l'outil. */
+/* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que si on leur a
+   assigné un nom ET qu'ils ont réellement un quart cette semaine-là — sinon ils restent masqués
+   pour ne pas encombrer l'outil avec une ligne vide la plupart des semaines. */
 function activeEmployees(){
-  return EMPLOYEES.filter(emp => !['H','I','J'].includes(emp.code) || (REAL_NAMES[emp.code] && REAL_NAMES[emp.code].trim()));
+  return EMPLOYEES.filter(emp=>{
+    if(!['H','I','J'].includes(emp.code)) return true;
+    if(!(REAL_NAMES[emp.code] && REAL_NAMES[emp.code].trim())) return false;
+    for(let i=0;i<7;i++){
+      if(computeCell(emp.code, i).cls !== 'off') return true;
+    }
+    return false;
+  });
 }
 
 /* Ordre d'ancienneté de métier (du plus ancien au plus jeune) — utilisé pour l'offre de surtemps.
