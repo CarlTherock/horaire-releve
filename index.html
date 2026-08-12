@@ -322,6 +322,11 @@ tr:hover td.emp-col{background:#1a222d;}
 .shift.off{color:var(--text-dim2);font-size:10.5px;}
 .shift.ot{background:rgba(242,193,78,0.1);color:var(--ot);border:1px solid rgba(242,193,78,0.45);}
 .shift.gap{background:rgba(224,100,95,0.1);color:var(--alert);border:1px solid rgba(224,100,95,0.4);}
+.shift.ot-flag{
+  box-shadow:0 0 0 2px rgba(242,193,78,0.65), 0 0 8px rgba(242,193,78,0.35);
+  border:1px solid rgba(242,193,78,0.7) !important;
+}
+.shift.ot-flag .tag{color:var(--ot) !important;font-weight:600;opacity:1;}
 .shift .tag{display:block;font-style:italic;font-size:9.3px;opacity:.85;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;}
 
 /* ===== SIMULATOR ===== */
@@ -933,13 +938,22 @@ function reservistFullyMaladieThisWeek(code, w){
   return joDays.every(i => vacType(code, i, week)==='maladie');
 }
 /* Quota hebdomadaire de comblement d'un Jo (E/F/G) = son nombre de JO réels cette semaine-là
-   (jamais plus de 4). Fonction partagée par le moteur de simulation et par l'affichage de la
-   grille (pour savoir si son quota est déjà épuisé ailleurs cette semaine-là). */
+   (jamais plus de 4), MOINS le nombre de ces jours JO réels qu'il a personnellement marqués
+   absents (congé/maladie/vacances) — une absence sur un jour JO réel retire de la capacité
+   plutôt que d'être compensée en empruntant un autre jour ; le manque résultant cascade vers
+   la lettre suivante (E→F→G) selon l'échelle des pires quarts, comme pour toute pénurie de JO.
+   Fonction partagée par le moteur de simulation et par l'affichage de la grille. */
 function joQuotaFor(code, w){
   const week = w || WEEKS[weekIndex];
   const weekJo = REAL_JO_DEFAULT[ymd(week.start)];
-  if(weekJo && weekJo[code]) return [...weekJo[code]].filter(c=>c==='o').length;
-  return 4; // semaine hors table source : repli sur le maximum structurel (4/semaine)
+  let base;
+  if(weekJo && weekJo[code]) base = [...weekJo[code]].filter(c=>c==='o').length;
+  else return 4; // semaine hors table source : repli sur le maximum structurel (4/semaine), pas de réduction possible
+  let lost = 0;
+  for(let i=0;i<7;i++){
+    if(weekJo[code][i]==='o' && isVacDay(code, i, week)) lost++;
+  }
+  return Math.max(0, base - lost);
 }
 function vacatingCodesThisWeek(w){
   const week = w || WEEKS[weekIndex];
@@ -1099,10 +1113,11 @@ function computeCell(empCode, dayIdx){
     const coverAssignment = simResult.find(a=>a.coveredBy===empCode && a.dayIdx===dayIdx);
     if(coverAssignment){
       const letter = coverAssignment.shift==='j' ? 'J' : 'N';
-      const hours = (coverAssignment.shift==='j' ? '7:00–19:00' : '19:00–7:00') + ` (${letter})`;
-      const cls = coverAssignment.shift==='j' ? 'j' : 'n';
+      const isOt = coverAssignment.result.type==='ot';
+      const hours = (isOt ? '⚡ ' : '') + (coverAssignment.shift==='j' ? '7:00–19:00' : '19:00–7:00') + ` (${letter})`;
+      const cls = (coverAssignment.shift==='j' ? 'j' : 'n') + (isOt ? ' ot-flag' : '');
       let label;
-      if(coverAssignment.result.type==='ot') label = `Surtemps — comble ${coverAssignment.who}`;
+      if(isOt) label = `SURTEMPS — comble ${coverAssignment.who}`;
       else if(coverAssignment.result.type==='reg') label = `Renfort de jour — comble ${coverAssignment.who}`;
       else label = `Jo — comble ${coverAssignment.who}`;
       return {cls, hours, tag: label};
@@ -1149,7 +1164,7 @@ function baseCellStatus(empCode, dayIdx){
   // avec le moteur de comblement qui le rend indisponible ces jours-là aussi.
   if(['E','F','G'].includes(empCode) && isSummerPeriod(w.start) && reservistFullyMaladieThisWeek(empCode, w)){
     if(day.j!==empCode && day.n!==empCode){
-      return {cls:'maladie', hours:'Maladie', tag:'semaine complète'};
+      return {cls:'maladie', hours:'Maladie', tag:null};
     }
   }
 
