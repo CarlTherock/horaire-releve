@@ -1556,6 +1556,7 @@ function worksThisDay(code, dayIdx, w){
     const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
     return weekJo && weekJo[code] ? weekJo[code][dayIdx]!=='.' : true;
   }
+  if(['H','I','J'].includes(code)) return true; // renfort de jour "au besoin" : pas d'horaire fixe, tous les jours sont potentiellement pertinents
   return day.j===code || day.n===code;
 }
 
@@ -1563,7 +1564,7 @@ function renderChips(){
   const w = WEEKS[weekIndex];
   const picker = document.getElementById('vacDayPicker');
   picker.innerHTML = '';
-  ['A','B','C','D','E','F','G'].forEach(code=>{
+  activeEmployees().map(e=>e.code).forEach(code=>{
     const row = document.createElement('div');
     row.className = 'vac-row';
     const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
