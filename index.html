@@ -371,6 +371,9 @@ tr:hover td.emp-col{background:#1a222d;}
 .vac-day-btn.daybtn-jo{border-color:rgba(154,139,240,0.45);color:var(--jo);border-style:dashed;}
 .vac-day-btn.daybtn-off{color:var(--text-dim2);}
 .vac-day-btn.active{background:rgba(143,165,189,0.18);border-color:#8fa5bd;color:#c6d2df;border-style:solid;}
+.vac-day-btn.active-conge{background:rgba(154,178,145,0.12);border-color:#9abf91;color:#a9cfa0;}
+.vac-day-btn.active-maladie{background:rgba(216,120,160,0.18);border-color:#d878a0;color:#e6a0c4;}
+.vac-day-btn.active-vac{background:rgba(57,230,120,0.16);border-color:#39e678;color:#4bffa0;}
 .vac-week-btn{
   font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.03em;
   background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim2);
@@ -1361,7 +1364,9 @@ function renderChips(){
       const day = w.days[i];
       const key = code+'|'+ymd(day.date);
       const st = baseCellStatus(code, i);
-      html += `<button class="vac-day-btn daybtn-${st.cls}${vacDays.has(key)?' active':''}" data-day="${i}" title="${DAY_LABELS[i]} : ${st.hours}">${DAY_LABELS[i][0].toUpperCase()}</button>`;
+      const vt = vacType(code, i, w); // 'conge' | 'maladie' | 'vac' | null
+      const activeClass = vt ? ` active active-${vt}` : '';
+      html += `<button class="vac-day-btn daybtn-${st.cls}${activeClass}" data-day="${i}" title="${DAY_LABELS[i]} : ${st.hours}">${DAY_LABELS[i][0].toUpperCase()}</button>`;
     });
     if(workDays.length===0) html += `<span style="font-size:10.5px;color:var(--text-dim2);font-style:italic;">aucun quart cette semaine</span>`;
     html += `</div>`;
