@@ -821,8 +821,8 @@ const DAY_LABELS = ["dim.","lun.","mar.","mer.","jeu.","ven.","sam."];
 const EMPLOYEES = [
   {code:"A", role:"Titulaire"}, {code:"B", role:"Titulaire"},
   {code:"C", role:"Titulaire"}, {code:"D", role:"Titulaire"},
-  {code:"G", role:"Titulaire 0,5 + Jo"},
   {code:"E", role:"Réserviste (Jo)"}, {code:"F", role:"Réserviste (Jo)"},
+  {code:"G", role:"Titulaire 0,5 + Jo"},
   {code:"X", role:"Renfort de jour (au besoin)"}
 ];
 const REAL_NAMES = {
@@ -1503,7 +1503,7 @@ function renderChips(){
   const w = WEEKS[weekIndex];
   const picker = document.getElementById('vacDayPicker');
   picker.innerHTML = '';
-  ['A','B','C','D','G','E','F'].forEach(code=>{
+  ['A','B','C','D','E','F','G'].forEach(code=>{
     const row = document.createElement('div');
     row.className = 'vac-row';
     const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
