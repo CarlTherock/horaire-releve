@@ -850,8 +850,10 @@ let REAL_NAMES = {
   E:"Lapierre, Frédéric", H:"Bonenfant, Alexis"
 };
 /* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que si on leur a
-   assigné un nom ET qu'ils ont réellement un quart cette semaine-là — sinon ils restent masqués
-   pour ne pas encombrer l'outil avec une ligne vide la plupart des semaines. */
+   assigné un nom ET qu'ils ont réellement un quart (ou une absence marquée — vacances/congé/
+   maladie) cette semaine-là — sinon ils restent masqués pour ne pas encombrer l'outil la plupart
+   des semaines. Une absence marquée compte comme "activité" : ça reste visible pour qu'on sache
+   pourquoi le comblement est passé au suivant (H→I→J), sans jamais remettre l'horaire en doute. */
 function activeEmployees(){
   return EMPLOYEES.filter(emp=>{
     if(!['H','I','J'].includes(emp.code)) return true;
@@ -860,6 +862,15 @@ function activeEmployees(){
       if(computeCell(emp.code, i).cls !== 'off') return true;
     }
     return false;
+  });
+}
+/* Employés nommés, SANS exiger d'activité cette semaine-là — utilisé par le panneau de sélection
+   des vacances/absences, pour qu'on puisse justement cliquer "Vacances" sur H/I/J la première fois
+   (sinon ils n'apparaîtraient jamais dans ce panneau pour qu'on les y marque). */
+function namedEmployees(){
+  return EMPLOYEES.filter(emp=>{
+    if(!['H','I','J'].includes(emp.code)) return true;
+    return !!(REAL_NAMES[emp.code] && REAL_NAMES[emp.code].trim());
   });
 }
 
@@ -1328,8 +1339,6 @@ function computeCell(empCode, dayIdx){
     }
   }
 
-  if(['H','I','J'].includes(empCode)) return {cls:'off', hours:'—', tag:null};
-
   // Le quart de cet employé absent attend une confirmation de surtemps (pas encore acceptée par
   // personne) : on le signale directement sur sa propre case avec un petit repère "?", sans
   // écraser son statut réel (Vacances/Congé/Maladie). Une fois confirmé, ce repère disparaît —
@@ -1564,7 +1573,7 @@ function renderChips(){
   const w = WEEKS[weekIndex];
   const picker = document.getElementById('vacDayPicker');
   picker.innerHTML = '';
-  activeEmployees().map(e=>e.code).forEach(code=>{
+  namedEmployees().map(e=>e.code).forEach(code=>{
     const row = document.createElement('div');
     row.className = 'vac-row';
     const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
