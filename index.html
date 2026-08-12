@@ -1060,18 +1060,29 @@ function shiftsAdjacent(dayIdxA, shiftA, dayIdxB, shiftB){
   return false;
 }
 /* Un candidat est éligible au surtemps pour ce quart s'il n'est pas en vacances/congé/maladie ce
-   jour-là (une absence bloque toute la journée — J et N, pas seulement le quart habituel), ET si
-   accepter ce quart ne créerait pas 24h consécutives avec un vrai quart TRAVAILLÉ (ABCDG pour un
-   titulaire, horaire maître Jo pour un réserviste, ou un autre surtemps déjà accepté) la veille ou
-   le lendemain. Un congé/maladie un jour adjacent ne bloque PAS en soi le jour suivant/précédent —
-   n'étant pas au travail, il n'y a pas de fatigue réelle à faire respecter au-delà de sa propre
-   journée d'absence. */
-function otCandidateEligible(code, dayIdx, shiftType, w){
+   jour-là (une absence bloque toute la journée — J et N, pas seulement le quart habituel), s'il
+   n'est pas un réserviste totalement incapacité pour toute la semaine (règle été — voir
+   reservistFullyMaladieThisWeek), ET si accepter ce quart ne créerait pas 24h consécutives avec un
+   vrai quart TRAVAILLÉ — que ce soit son horaire maître statique (ABCDG/Jo) OU une affectation déjà
+   décidée dans CETTE simulation (comblement JO normal ou surtemps déjà accepté) — la veille ou le
+   lendemain. Un congé/maladie ponctuel un jour adjacent ne bloque PAS en soi le jour suivant/
+   précédent : n'étant pas au travail, il n'y a pas de fatigue réelle au-delà de sa propre absence. */
+function otCandidateEligible(code, dayIdx, shiftType, w, extraAssignments){
   if(isVacDay(code, dayIdx, w)) return false; // congé/maladie/vacances bloque toute la journée (J et N)
   const week = w || WEEKS[weekIndex];
+  if(['E','F','G'].includes(code) && isSummerPeriod(week.start) && reservistFullyMaladieThisWeek(code, week)) return false;
   for(let i=0;i<7;i++){
     const badge = originalShiftBadge(code, i, week);
     if(badge && !isVacDay(code, i, week) && shiftsAdjacent(dayIdx, shiftType, i, badge)) return false;
+  }
+  // Affectations déjà décidées dans cette simulation (comblement JO ou surtemps confirmé) — pas
+  // seulement l'horaire maître statique, sinon on pourrait offrir un quart adjacent à un remplacement
+  // déjà en cours pour cette même personne.
+  const extra = extraAssignments || simResult || [];
+  for(const a of extra){
+    if(a.coveredBy !== code) continue;
+    if(a.dayIdx===dayIdx && a.shift===shiftType) continue; // le quart lui-même, pas un conflit
+    if(shiftsAdjacent(dayIdx, shiftType, a.dayIdx, a.shift)) return false;
   }
   const weekDateStrings = new Set(week.days.map(d=>ymd(d.date)));
   for(const key in otConfirmations){
@@ -1711,7 +1722,7 @@ function runSimulation(){
     const shiftKey = ymd(u.date)+':'+u.shift;
     if(!otConfirmations[shiftKey]) otConfirmations[shiftKey] = {refused:new Set(), accepted:null};
     const conf = otConfirmations[shiftKey];
-    const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w));
+    const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w, assignments));
     const rank = u.rank!==undefined ? u.rank : shiftRank(u.date, u.shift==='n');
     if(conf.accepted){
       return {...u, coveredBy: conf.accepted, rank, result:{type:'ot', label:`Surtemps confirmé — ${conf.accepted} (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
@@ -1804,7 +1815,7 @@ function renderOtConfirmPanel(assignments, w){
   otShifts.forEach(u=>{
     const shiftKey = ymd(u.date)+':'+u.shift;
     const conf = otConfirmations[shiftKey] || {refused:new Set(), accepted:null};
-    const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w));
+    const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w, assignments));
     const dayLabel = DAY_LABELS[u.dayIdx] + ' ' + fmtDate(u.date,{day:'2-digit',month:'2-digit'});
     const shiftLabel = u.shift==='j' ? '7h–19h' : '19h–7h';
     html += `<div class="ot-shift-block">
