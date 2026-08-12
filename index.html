@@ -773,6 +773,14 @@ footer a{color:var(--text-dim);}
       <div id="namesEditor" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;"></div>
     </div>
 
+    <div class="vac-calendar-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
+      <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Calendrier de vacances 2026 — Relève usine</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">Transcrit à la main depuis le calendrier PDF officiel (image scannée, non lisible automatiquement par l'outil) pour A, B, C, D, F, G. Vérifiez la liste ci-dessous avant d'appliquer — ça marque chaque semaine comme <b>Vacances</b> pour l'employé concerné.</p>
+      <div id="vacCalendarPreview" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);line-height:1.9;margin-bottom:12px;"></div>
+      <button class="print-btn" id="applyVacCalendarBtn">Appliquer le calendrier de vacances 2026</button>
+      <span id="vacCalendarStatus" style="margin-left:10px;font-size:12px;color:var(--ok);"></span>
+    </div>
+
     <div class="seniority-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
       <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Paramètres — Ordre d'ancienneté (surtemps)</h2>
       <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">La lettre (A à G) ne reflète pas l'ancienneté réelle — ce n'est qu'une position sur l'horaire maître. Classez ici l'ordre d'ancienneté du plus ancien (haut) au plus jeune (bas) : c'est cet ordre, et non l'ordre E-F-G, qui détermine qui se voit offrir les 2 quarts de surtemps.</p>
@@ -1524,10 +1532,57 @@ function renderNamesEditor(){
       const v = input.value.trim();
       if(v) REAL_NAMES[emp.code] = v; else delete REAL_NAMES[emp.code];
       refreshAll();
+      renderVacCalendarPreview();
     };
     editor.appendChild(row);
   });
 }
+
+/* Calendrier de vacances 2026 — Relève usine, transcrit manuellement depuis le PDF officiel
+   (image scannée, sans texte extractible — donc pas de lecture automatique possible dans le
+   navigateur). Semaines identifiées par leur date de FIN (samedi) ; converties ci-dessous en
+   date de DÉBUT (dimanche) pour matcher WEEKS[]. Chaque semaine listée = une semaine complète
+   de Vacances pour cet employé. */
+const VAC_CALENDAR_2026 = {
+  A: ['2026-02-15','2026-03-08','2026-08-09','2026-08-16','2026-12-20'],
+  B: ['2026-01-18','2026-06-07','2026-07-12','2026-07-19','2026-09-13'],
+  C: ['2026-08-23','2026-08-30','2026-09-20','2026-10-04','2026-11-01'],
+  D: ['2026-02-22','2026-06-21','2026-07-12','2026-07-19','2026-09-06','2026-09-20'],
+  F: ['2026-02-22','2026-05-24','2026-08-02','2026-08-30'],
+  G: ['2026-01-11','2026-06-14','2026-07-26','2026-08-02','2026-10-11','2026-10-18']
+};
+
+function renderVacCalendarPreview(){
+  const el = document.getElementById('vacCalendarPreview');
+  let html = '';
+  Object.keys(VAC_CALENDAR_2026).forEach(code=>{
+    const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
+    const dates = VAC_CALENDAR_2026[code].map(d=>fmtDate(new Date(d+'T12:00:00'),{day:'2-digit',month:'2-digit'})).join(', ');
+    html += `<div><span class="letter-chip" style="width:20px;height:20px;font-size:10px;">${code}</span> <b style="color:var(--text);">${name}</b> — ${dates}</div>`;
+  });
+  el.innerHTML = html;
+}
+
+document.getElementById('applyVacCalendarBtn').onclick = ()=>{
+  let count = 0;
+  Object.keys(VAC_CALENDAR_2026).forEach(code=>{
+    VAC_CALENDAR_2026[code].forEach(startStr=>{
+      const wIdx = WEEKS.findIndex(w=>ymd(w.start)===startStr);
+      if(wIdx<0) return;
+      const w = WEEKS[wIdx];
+      w.days.forEach((day,i)=>{
+        vacDays.set(code+'|'+ymd(day.date), 'vac');
+      });
+      count++;
+    });
+  });
+  simResult = null;
+  saveState();
+  refreshAll();
+  const status = document.getElementById('vacCalendarStatus');
+  status.textContent = `✓ ${count} semaines appliquées`;
+  setTimeout(()=>{ status.textContent=''; }, 4000);
+};
 
 /* Bascule un jour d'absence pour un employé (A-G) — jour précis, cliqué directement dans la
    grille ou via les boutons jour du panneau. Sans type forcé, fait un cycle normal → congé →
@@ -2224,6 +2279,7 @@ document.getElementById('nextDay').onclick = ()=>{
 refreshAll();
 renderSeniorityList();
 renderNamesEditor();
+renderVacCalendarPreview();
 if(viewMode==='day'){
   document.getElementById('viewDayBtn').classList.add('active');
   document.getElementById('viewGridBtn').classList.remove('active');
