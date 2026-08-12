@@ -491,6 +491,11 @@ tr:hover td.emp-col{background:#1a222d;}
 }
 .ot-status-icon.ok{background:rgba(79,174,126,0.25);color:var(--ok);}
 .ot-status-icon.no{background:rgba(224,100,95,0.25);color:var(--alert);}
+.ot-badge-accepted{
+  font-family:'Oswald',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.02em;
+  padding:8px 16px;border-radius:7px;text-transform:uppercase;
+  background:var(--ok);color:#08301c;box-shadow:0 2px 8px rgba(79,174,126,0.5);
+}
 .ot-btn{
   font-family:'Oswald',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.02em;
   padding:8px 16px;border-radius:7px;cursor:pointer;border:none;transition:.15s;
@@ -1044,6 +1049,37 @@ function originalShiftBadge(empCode, dayIdx, w){
     }
   }
   return null;
+}
+/* Deux quarts sont "adjacents" (formeraient 24h consécutives pour la même personne) : même jour
+   J+N, ou N un jour suivi de J le lendemain matin. Partagé par le moteur de comblement et par la
+   liste de candidats du tableau de confirmation du surtemps. */
+function shiftsAdjacent(dayIdxA, shiftA, dayIdxB, shiftB){
+  if(dayIdxA===dayIdxB && shiftA!==shiftB) return true;
+  if(shiftA==='n' && shiftB==='j' && dayIdxB===dayIdxA+1) return true;
+  if(shiftB==='n' && shiftA==='j' && dayIdxA===dayIdxB+1) return true;
+  return false;
+}
+/* Un candidat est éligible au surtemps pour ce quart s'il n'est pas en vacances/congé/maladie ce
+   jour-là, ET si accepter ce quart ne créerait pas 24h consécutives — ni avec son propre quart
+   fixe (ABCDG pour un titulaire, horaire maître Jo pour un réserviste) cette semaine-là, ni avec
+   un autre quart de surtemps déjà accepté cette même semaine (art. sécurité — repos entre quarts). */
+function otCandidateEligible(code, dayIdx, shiftType, w){
+  if(isVacDay(code, dayIdx, w)) return false;
+  const week = w || WEEKS[weekIndex];
+  for(let i=0;i<7;i++){
+    const badge = originalShiftBadge(code, i, week);
+    if(badge && shiftsAdjacent(dayIdx, shiftType, i, badge)) return false;
+  }
+  const weekDateStrings = new Set(week.days.map(d=>ymd(d.date)));
+  for(const key in otConfirmations){
+    const [dateStr, sh] = key.split(':');
+    if(!weekDateStrings.has(dateStr)) continue;
+    if(otConfirmations[key].accepted !== code) continue;
+    const otherDayIdx = week.days.findIndex(d=>ymd(d.date)===dateStr);
+    if(otherDayIdx<0) continue;
+    if(shiftsAdjacent(dayIdx, shiftType, otherDayIdx, sh)) return false;
+  }
+  return true;
 }
 function vacatingCodesThisWeek(w){
   const week = w || WEEKS[weekIndex];
@@ -1672,7 +1708,7 @@ function runSimulation(){
     const shiftKey = ymd(u.date)+':'+u.shift;
     if(!otConfirmations[shiftKey]) otConfirmations[shiftKey] = {refused:new Set(), accepted:null};
     const conf = otConfirmations[shiftKey];
-    const candidates = seniorityOrder.filter(c=>!isVacDay(c, u.dayIdx, w));
+    const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w));
     const rank = u.rank!==undefined ? u.rank : shiftRank(u.date, u.shift==='n');
     if(conf.accepted){
       return {...u, coveredBy: conf.accepted, rank, result:{type:'ot', label:`Surtemps confirmé — ${conf.accepted} (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
@@ -1765,7 +1801,7 @@ function renderOtConfirmPanel(assignments, w){
   otShifts.forEach(u=>{
     const shiftKey = ymd(u.date)+':'+u.shift;
     const conf = otConfirmations[shiftKey] || {refused:new Set(), accepted:null};
-    const candidates = seniorityOrder.filter(c=>!isVacDay(c, u.dayIdx, w));
+    const candidates = seniorityOrder.filter(c=>otCandidateEligible(c, u.dayIdx, u.shift, w));
     const dayLabel = DAY_LABELS[u.dayIdx] + ' ' + fmtDate(u.date,{day:'2-digit',month:'2-digit'});
     const shiftLabel = u.shift==='j' ? '7h–19h' : '19h–7h';
     html += `<div class="ot-shift-block">
@@ -1776,6 +1812,9 @@ function renderOtConfirmPanel(assignments, w){
       const isRefused = conf.refused.has(c);
       const isCurrent = !conf.accepted && !isRefused && !resolved;
       if(isCurrent) resolved = true; // le prochain non-refusé après celui-ci est "en attente"
+      // Une fois quelqu'un accepté, on masque les candidats jamais sollicités (non refusés, non
+      // acceptés) pour alléger l'affichage — seuls le candidat accepté et l'historique des refus restent.
+      if(conf.accepted && !isAccepted && !isRefused) return;
       let rowClass = 'ot-candidate-row';
       if(isAccepted) rowClass += ' ot-accepted';
       else if(isRefused) rowClass += ' ot-refused';
@@ -1787,7 +1826,7 @@ function renderOtConfirmPanel(assignments, w){
         <span class="letter-chip">${c}</span>
         <span class="ot-cand-name">${name}</span>`;
       if(isAccepted){
-        html += `<span class="ot-status-icon ok">✓</span><button class="ot-btn-reset" data-reset="${shiftKey}">annuler</button>`;
+        html += `<span class="ot-badge-accepted">✓ ACCEPTÉ</span><button class="ot-btn-reset" data-reset="${shiftKey}">annuler</button>`;
       } else if(isRefused){
         html += `<span class="ot-status-icon no">✕</span>`;
       } else if(isCurrent && !conf.accepted){
