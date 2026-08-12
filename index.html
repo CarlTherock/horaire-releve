@@ -1573,7 +1573,7 @@ function renderChips(){
   const w = WEEKS[weekIndex];
   const picker = document.getElementById('vacDayPicker');
   picker.innerHTML = '';
-  namedEmployees().map(e=>e.code).forEach(code=>{
+  activeEmployees().map(e=>e.code).forEach(code=>{
     const row = document.createElement('div');
     row.className = 'vac-row';
     const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
@@ -1878,6 +1878,7 @@ function runSimulation(){
     joUsed,
     joRemaining: totalJoAvailable - joUsed
   }, sickReservistSummer);
+  renderChips();
   renderTable();
   renderDayView();
   renderJoStat();
