@@ -347,6 +347,9 @@ tr:hover td.emp-col{background:#1a222d;}
 .chip-toggle.active{background:rgba(224,100,95,0.14);border-color:rgba(224,100,95,0.5);color:#f0908c;}
 .chip-toggle .mini-chip{width:18px;height:18px;border-radius:5px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;}
 .chip-toggle.jo-toggle.active{background:rgba(154,139,240,0.14);border-color:rgba(154,139,240,0.5);color:#c3b6f5;}
+.chip-toggle.jo-toggle.active-conge{background:rgba(154,178,145,0.12);border-color:#9abf91;color:#a9cfa0;}
+.chip-toggle.jo-toggle.active-maladie{background:rgba(216,120,160,0.18);border-color:#d878a0;color:#e6a0c4;}
+.chip-toggle.jo-toggle.active-vac{background:rgba(57,230,120,0.16);border-color:#39e678;color:#4bffa0;}
 
 .vac-row{
   display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);
@@ -1176,17 +1179,13 @@ function baseCellStatus(empCode, dayIdx){
   }
 
   if(empCode==='E' || empCode==='F'){
-    const key = empCode+'|'+ymd(day.date);
-    const isUnavail = unavailableJo.has(key);
     const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
     const code = weekJo ? weekJo[empCode][dayIdx] : 'o'; // repli : JO par défaut si semaine hors table source
     if(code==='j') return {cls:'j', hours:'7:00–19:00', tag:'horaire maître Jo'};
     if(code==='n') return {cls:'n', hours:'19:00–7:00', tag:'horaire maître Jo'};
     if(code==='.') return {cls:'off', hours:'—', tag:null}; // repos selon l'horaire maître Jo
-    // code === 'o' (JO / disponible)
-    return isUnavail
-      ? {cls:'gap', hours:'Indispo.', tag:'signalé'}
-      : {cls:'jo', hours:'JO', tag:'disponible'};
+    // code === 'o' (JO / disponible) — les cas congé/maladie/vacances sont déjà interceptés plus haut
+    return {cls:'jo', hours:'JO', tag:'disponible'};
   }
   if(day.j===empCode) return {cls:'j', hours:'7:00–19:00', tag:null};
   if(day.n===empCode) return {cls:'n', hours:'19:00–7:00', tag:null};
@@ -1196,12 +1195,7 @@ function baseCellStatus(empCode, dayIdx){
     // jours ABCDG réels (vérifié sur les 53 semaines transcrites) — plus besoin de décalage.
     const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
     const code = weekJo && weekJo.G ? weekJo.G[dayIdx] : null;
-    if(code==='o'){
-      const key = 'G|'+ymd(day.date);
-      return unavailableJo.has(key)
-        ? {cls:'gap', hours:'Indispo.', tag:'signalé'}
-        : {cls:'jo', hours:'JO', tag:'disponible'};
-    }
+    if(code==='o') return {cls:'jo', hours:'JO', tag:'disponible'};
     // code 'j'/'n' déjà couvert plus haut par day.j/day.n (ABCDG) ; '.' ou absence de donnée => repos
   }
 
@@ -1422,15 +1416,12 @@ function renderChips(){
   ['E','F','G'].forEach(code=>{
     w.days.forEach((day,i)=>{
       if(weekJo && weekJo[code] && weekJo[code][i]!=='o') return; // pas un jour JO cette semaine-là : rien à basculer
-      const key = code+'|'+ymd(day.date);
+      const vt = vacType(code, i, w); // null | 'conge' | 'maladie' | 'vac'
       const chip = document.createElement('div');
-      chip.className = 'chip-toggle jo-toggle' + (unavailableJo.has(key)?' active':'');
+      chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '');
       chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}`;
-      chip.onclick = ()=>{
-        if(unavailableJo.has(key)) unavailableJo.delete(key); else unavailableJo.add(key);
-        renderChips(); renderTable(); renderJoStat();
-        saveState();
-      };
+      chip.title = vt ? `Cliquer pour retirer (${vt})` : 'Cliquer : disponible → Congé → Maladie';
+      chip.onclick = ()=> toggleVacDay(code, i, w);
       jChips.appendChild(chip);
     });
   });
@@ -1521,8 +1512,7 @@ function runSimulation(){
     if(code==='G'){
       const day = w.days[dayIdx];
       if(day.j==='G' || day.n==='G') return false; // G a déjà son propre quart ABCDG ce jour-là
-      const key = 'G|'+ymd(w.days[dayIdx].date);
-      return !unavailableJo.has(key);
+      return true;
     }
 
     const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
@@ -1530,8 +1520,7 @@ function runSimulation(){
       const dayCode = weekJo[code][dayIdx];
       if(dayCode==='j' || dayCode==='n') return false; // quart fixe déjà prévu ce jour-là : conflit réel
     }
-    const key = code+'|'+ymd(w.days[dayIdx].date);
-    return !unavailableJo.has(key);
+    return true;
   }
   function isOwnJoDay(code, dayIdx){
     if(code==='G'){
