@@ -920,6 +920,18 @@ function vacType(code, dayIdx, w){
   const week = w || WEEKS[weekIndex];
   return vacDays.get(code+'|'+ymd(week.days[dayIdx].date)) || null;
 }
+/* Un réserviste (E/F/G) dont TOUS ses jours JO réels de la semaine sont marqués "Maladie" est
+   considéré incapable de travailler toute la semaine (pas seulement ses jours JO habituels) —
+   utilisé à la fois par le moteur de comblement et par l'affichage de la grille, pour rester
+   cohérents (on ne "l'emprunte" plus sur ses jours normalement off une fois cette règle active). */
+function reservistFullyMaladieThisWeek(code, w){
+  const week = w || WEEKS[weekIndex];
+  const weekJo = REAL_JO_DEFAULT[ymd(week.start)];
+  if(!weekJo || !weekJo[code]) return false;
+  const joDays = [...weekJo[code]].map((c,i)=>c==='o'?i:null).filter(x=>x!==null);
+  if(joDays.length===0) return false;
+  return joDays.every(i => vacType(code, i, week)==='maladie');
+}
 function vacatingCodesThisWeek(w){
   const week = w || WEEKS[weekIndex];
   const codes = new Set();
@@ -1111,6 +1123,15 @@ function baseCellStatus(empCode, dayIdx){
     if(t==='vac') return {cls:'vac', hours:'Vacances', tag:null};
     if(t==='maladie') return {cls:'maladie', hours:'Maladie', tag:null};
     return {cls:'conge', hours:'Congé', tag:null};
+  }
+
+  // Réserviste (E/F/G) dont tous les jours JO réels sont malades cette semaine, en été : incapacité
+  // pour toute la semaine — affiche "Maladie" même les jours non explicitement cochés, cohérent
+  // avec le moteur de comblement qui le rend indisponible ces jours-là aussi.
+  if(['E','F','G'].includes(empCode) && isSummerPeriod(w.start) && reservistFullyMaladieThisWeek(empCode, w)){
+    if(day.j!==empCode && day.n!==empCode){
+      return {cls:'maladie', hours:'Maladie', tag:'semaine complète'};
+    }
   }
 
   if(empCode==='E' || empCode==='F'){
@@ -1450,6 +1471,9 @@ function runSimulation(){
   // (confirmé par le cas réel Lachance, appelé hors de ses jours JO habituels), mais jamais au-delà
   // de son propre nombre de JO cette semaine-là, ni au prix d'un enchaînement de 24h sans repos.
   function joAvailable(code, dayIdx, shift){
+    // Réserviste (E/F/G) dont TOUS les jours JO réels sont malades, durant l'été : incapacité pour
+    // toute la semaine, pas seulement les jours cochés (on ne "l'emprunte" plus sur ses jours off).
+    if(isSummerPeriod(w.start) && ['E','F','G'].includes(code) && reservistFullyMaladieThisWeek(code,w)) return false;
     if(isVacDay(code, dayIdx, w)) return false; // Jo lui-même en vacances ce jour-là
     if(assignedCount[code] >= joQuota(code)) return false; // quota hebdomadaire atteint
     if(adjacentSlots(dayIdx,shift).some(k=>occupiedSlots[code].has(k))) return false; // 24h consécutives
@@ -1506,14 +1530,7 @@ function runSimulation(){
   // vacances simultanément : on applique donc la même règle spéciale (max 2 quarts en surtemps
   // par ancienneté selon l'échelle des pires quarts, le reste à un employé de jour régulier),
   // plutôt que d'envoyer un nombre illimité de quarts en surtemps.
-  function reservistFullyMaladie(code){
-    const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
-    if(!weekJo || !weekJo[code]) return false;
-    const joDays = [...weekJo[code]].map((c,i)=>c==='o'?i:null).filter(x=>x!==null);
-    if(joDays.length===0) return false;
-    return joDays.every(i => vacType(code, i, w)==='maladie');
-  }
-  const sickReservistSummer = isSummerPeriod(w.start) && ['E','F','G'].some(reservistFullyMaladie);
+  const sickReservistSummer = isSummerPeriod(w.start) && ['E','F','G'].some(c=>reservistFullyMaladieThisWeek(c,w));
 
   if(specialRuleCount < 2 && !sickReservistSummer){
     // Comblement simple : Jo en commençant par la lettre E (Procédure pt. règle d'or / art 8.01 f6).
