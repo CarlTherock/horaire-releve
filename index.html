@@ -366,7 +366,11 @@ tr:hover td.emp-col{background:#1a222d;}
   display:flex;align-items:center;justify-content:center;transition:.15s;flex:none;
 }
 .vac-day-btn:hover{border-color:#3a4a5e;color:var(--text-dim);}
-.vac-day-btn.active{background:rgba(143,165,189,0.18);border-color:#8fa5bd;color:#c6d2df;}
+.vac-day-btn.daybtn-j{border-color:rgba(226,161,61,0.45);color:var(--jour);}
+.vac-day-btn.daybtn-n{border-color:rgba(91,147,204,0.45);color:var(--nuit);}
+.vac-day-btn.daybtn-jo{border-color:rgba(154,139,240,0.45);color:var(--jo);border-style:dashed;}
+.vac-day-btn.daybtn-off{color:var(--text-dim2);}
+.vac-day-btn.active{background:rgba(143,165,189,0.18);border-color:#8fa5bd;color:#c6d2df;border-style:solid;}
 .vac-week-btn{
   font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.03em;
   background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim2);
@@ -1356,7 +1360,8 @@ function renderChips(){
     workDays.forEach(i=>{
       const day = w.days[i];
       const key = code+'|'+ymd(day.date);
-      html += `<button class="vac-day-btn${vacDays.has(key)?' active':''}" data-day="${i}">${DAY_LABELS[i][0].toUpperCase()}</button>`;
+      const st = baseCellStatus(code, i);
+      html += `<button class="vac-day-btn daybtn-${st.cls}${vacDays.has(key)?' active':''}" data-day="${i}" title="${DAY_LABELS[i]} : ${st.hours}">${DAY_LABELS[i][0].toUpperCase()}</button>`;
     });
     if(workDays.length===0) html += `<span style="font-size:10.5px;color:var(--text-dim2);font-style:italic;">aucun quart cette semaine</span>`;
     html += `</div>`;
