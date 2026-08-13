@@ -381,6 +381,14 @@ tr:hover td.emp-col{background:#1a222d;}
 }
 .orig-badge-j{background:var(--jour);color:#241804;}
 .orig-badge-n{background:var(--nuit);color:#04121f;}
+.swap-dot{
+  position:absolute;bottom:-6px;right:-6px;width:16px;height:16px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;
+  background:#2a2f8f;border:1.5px solid #0e131a;z-index:2;cursor:pointer;
+}
+.shift-cell.is-swapped{outline:1px dashed rgba(120,140,255,0.5);outline-offset:-2px;}
+.shift-cell.swap-picked{outline:2px solid var(--jour) !important;outline-offset:-2px;background:rgba(226,161,61,0.12);}
+.shift-cell[draggable="true"]{cursor:grab;}
 .shift.j{background:var(--jour-dim);color:var(--jour);border:1px solid rgba(226,161,61,0.28);}
 .shift.n{background:var(--nuit-dim);color:var(--nuit);border:1px solid rgba(91,147,204,0.32);}
 .shift.jo{background:rgba(154,139,240,0.09);color:var(--jo);border:1px dashed rgba(154,139,240,0.35);}
@@ -712,6 +720,7 @@ footer a{color:var(--text-dim);}
   .print-week-block .shift.off{ color:#8a939e; border:none; background:none; }
   .print-week-block .shift .tag{ color:inherit; opacity:.8; }
   .print-week-block .letter-chip{ background:#eef1f5 !important; color:#1a1f27; border:1px solid #cfd6de; }
+  .print-week-block .swap-dot{ background:#2a2f8f !important; color:#fff; border-color:#fff; }
 }
 
 /* ===== MODE CAPTURE (génération d'image pour le bouton "Partager") =====
@@ -755,6 +764,7 @@ body.capture-mode .print-week-block .shift.gap{ background:#d64c3f !important; c
 body.capture-mode .print-week-block .shift.reg{ background:#3f76ad !important; color:#ffffff; border-color:#28517a; font-weight:600; }
 body.capture-mode .print-week-block .shift.off{ color:#8a939e; border:none; background:none; }
 body.capture-mode .print-week-block .letter-chip{ background:#eef1f5 !important; color:#1a1f27; border:1px solid #cfd6de; }
+body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; color:#fff; border-color:#fff; }
 
 /* ===== MODALE "PARTAGER" ===== */
 #shareModal{display:none;}
@@ -864,11 +874,13 @@ body.capture-mode .print-week-block .letter-chip{ background:#eef1f5 !important;
       <h2>Horaire de la semaine — <b>horaire maître ABCDG</b></h2>
       <div style="display:flex;align-items:center;gap:10px;">
         <h2 style="font-size:11px;">Source : 2026_ABCDG.pdf</h2>
+        <span id="swapHint" style="display:none;font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">🔀 glisser une case sur une autre (ou appui long sur mobile) pour échanger</span>
         <button class="print-btn" id="printGridBtn" title="Imprimer la grille de cette semaine (paysage, couleur)">🖶 Imprimer</button>
         <button class="print-btn print-btn-secondary" id="print4WeeksBtn" title="Imprimer cette semaine et les 3 suivantes (une par page)">🖶 Imprimer 4 semaines</button>
         <button class="print-btn print-btn-secondary" id="shareBtn" title="Partager l'horaire en image">📤 Partager</button>
       </div>
     </div>
+    <div id="swapStatus" style="display:none;font-size:12px;padding:8px 18px;border-bottom:1px solid var(--line);"></div>
     <div class="grid-scroll">
       <table class="schedule" id="scheduleTable">
         <thead><tr id="headRow"></tr></thead>
@@ -1348,6 +1360,66 @@ function vacType(code, dayIdx, w){
   const week = w || WEEKS[weekIndex];
   return vacDays.get(code+'|'+ymd(week.days[dayIdx].date)) || null;
 }
+
+/* ============================================================
+   ÉCHANGES MANUELS ENTRE 2 EMPLOYÉS (même jour) — "les employés veulent parfois échanger des
+   relèves pour accommoder leur horaire". Aucune règle de la convention n'est appliquée (24h
+   consécutives, ancienneté, etc.) — échange brut du contenu de 2 cases, tel que demandé.
+   Activable seulement une fois qu'une simulation existe pour la semaine (simResult non nul) —
+   après ce moment-là, le comblement/surtemps est déjà déterminé et l'échange n'est qu'une
+   question de qui se présente physiquement. Persiste comme les vacances (par date réelle, donc
+   ça fonctionne même sur une semaine déjà gelée/publiée).
+   Clé : date ISO du jour (YYYY-MM-DD) -> tableau de paires [codeA, codeB].
+============================================================ */
+let manualSwaps = new Map();
+function getSwapPairsForDate(iso){ return manualSwaps.get(iso) || []; }
+function getSwapPartner(code, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  const iso = ymd(week.days[dayIdx].date);
+  const pairs = manualSwaps.get(iso);
+  if(!pairs) return null;
+  for(const pair of pairs){
+    if(pair[0]===code) return pair[1];
+    if(pair[1]===code) return pair[0];
+  }
+  return null;
+}
+function addSwap(codeA, codeB, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  const iso = ymd(week.days[dayIdx].date);
+  const pairs = manualSwaps.get(iso) || [];
+  pairs.push([codeA, codeB]);
+  manualSwaps.set(iso, pairs);
+}
+function removeSwap(codeA, codeB, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  const iso = ymd(week.days[dayIdx].date);
+  const pairs = manualSwaps.get(iso);
+  if(!pairs) return false;
+  const idx = pairs.findIndex(p => (p[0]===codeA && p[1]===codeB) || (p[0]===codeB && p[1]===codeA));
+  if(idx<0) return false;
+  pairs.splice(idx,1);
+  if(pairs.length===0) manualSwaps.delete(iso); else manualSwaps.set(iso, pairs);
+  return true;
+}
+/* Tente un échange entre codeX et codeY le même jour. Si c'est déjà la paire échangée en place,
+   ça défait l'échange (annulation en re-sélectionnant les 2 mêmes cases, comme demandé). Si l'une
+   des 2 cases fait déjà partie d'un AUTRE échange ce jour-là, refusé — il faut d'abord l'annuler. */
+function attemptSwap(codeX, codeY, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  if(codeX === codeY) return {ok:false, msg:"On ne peut pas échanger une case avec elle-même."};
+  const partnerX = getSwapPartner(codeX, dayIdx, week);
+  const partnerY = getSwapPartner(codeY, dayIdx, week);
+  if(partnerX === codeY && partnerY === codeX){
+    removeSwap(codeX, codeY, dayIdx, week);
+    return {ok:true, undone:true};
+  }
+  if(partnerX || partnerY){
+    return {ok:false, msg:"Une des deux cases fait déjà partie d'un échange ce jour-là — touche ses 2 cases échangées pour l'annuler d'abord."};
+  }
+  addSwap(codeX, codeY, dayIdx, week);
+  return {ok:true, undone:false};
+}
 /* Un réserviste (E/F/G) dont TOUS ses jours JO réels de la semaine sont marqués "Maladie" est
    considéré incapable de travailler toute la semaine (pas seulement ses jours JO habituels) —
    utilisé à la fois par le moteur de comblement et par l'affichage de la grille, pour rester
@@ -1476,6 +1548,7 @@ function saveState(){
       weekStart: ymd(WEEKS[weekIndex].start),
       showReal, filterWorkersOnly, currentDayIdx, seniorityOrder,
       vacDays: Array.from(vacDays.entries()),
+      manualSwaps: Array.from(manualSwaps.entries()),
       unavailableJo: Array.from(unavailableJo),
       otConfirmations: otConfSerializable,
       realNames: REAL_NAMES,
@@ -1509,6 +1582,7 @@ function loadState(){
       seniorityOrder = s.seniorityOrder;
     }
     if(Array.isArray(s.vacDays)) vacDays = new Map(s.vacDays);
+    if(Array.isArray(s.manualSwaps)) manualSwaps = new Map(s.manualSwaps);
     if(Array.isArray(s.unavailableJo)) unavailableJo = new Set(s.unavailableJo);
     if(s.otConfirmations && typeof s.otConfirmations==='object'){
       otConfirmations = {};
@@ -1601,7 +1675,24 @@ const REAL_WEEK_KNOWN_CODES = new Set(
   Object.keys(REAL_WEEK_CELLS).map(k=>k.split('|')[0])
 );
 
+/* Enveloppe de computeCellBase qui applique un échange manuel s'il y en a un ce jour-là pour cet
+   employé — retourne alors le contenu RÉEL du partenaire d'échange (jamais re-redirigé, on appelle
+   toujours computeCellBase pour le partenaire afin d'éviter toute récursion). Désactivé sur la
+   semaine réelle publiée (isReal) — cette vue est une référence de validation figée, non éditable,
+   comme le reste des interactions de la grille. */
 function computeCell(empCode, dayIdx){
+  const w = WEEKS[weekIndex];
+  const isReal = showReal && ymd(w.start) === REAL_WEEK_START;
+  if(!isReal){
+    const partner = getSwapPartner(empCode, dayIdx, w);
+    if(partner){
+      const base = computeCellBase(partner, dayIdx);
+      return {...base, swapped:true, swapPartner:partner};
+    }
+  }
+  return computeCellBase(empCode, dayIdx);
+}
+function computeCellBase(empCode, dayIdx){
   const w = WEEKS[weekIndex];
   const day = w.days[dayIdx];
 
@@ -1732,11 +1823,12 @@ function buildScheduleHTML(w, isReal){
     const clickable = !isReal && !['H','I','J'].includes(emp.code);
     w.days.forEach((day,i)=>{
       const c = computeCell(emp.code, i);
-      const canToggle = clickable && worksThisDay(emp.code, i, w);
+      const canToggle = clickable && worksThisDay(emp.code, i, w) && !c.swapped;
       const t = truncTag(c.tag, 15);
       const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
       const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
-      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${badgeHtml}${c.hours}${tagHtml}</span></td>`;
+      const swapDotHtml = c.swapped ? `<span class="swap-dot" data-swap-remove="1" title="Échangé avec ${displayName(c.swapPartner)} — toucher pour annuler l'échange">🔄</span>` : '';
+      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${badgeHtml}${swapDotHtml}${c.hours}${tagHtml}</span></td>`;
     });
     bodyHTML += `<tr>${cells}</tr>`;
   });
@@ -1755,9 +1847,139 @@ function renderTable(){
   body.innerHTML = bodyHTML;
   if(!isReal){
     body.querySelectorAll('.shift-cell.toggle-vac').forEach(td=>{
-      td.onclick = ()=> toggleVacDay(td.dataset.code, parseInt(td.dataset.day,10), w);
+      td.onclick = (e)=>{
+        if(e.target.closest('[data-swap-remove]')) return; // le clic sur le rond d'échange est géré séparément
+        toggleVacDay(td.dataset.code, parseInt(td.dataset.day,10), w);
+      };
     });
   }
+  attachSwapHandlers(w, isReal);
+}
+
+/* ============================================================
+   INTERACTIONS D'ÉCHANGE — glisser-déposer natif (souris/PC) + appui long puis toucher (mobile).
+   Aucun bouton "mode" séparé : le geste seul distingue l'échange du clic normal (qui continue de
+   faire le cycle congé/maladie/vacances sans être affecté). Activé pour la création uniquement
+   quand une simulation existe pour la semaine affichée et que ce n'est pas la semaine réelle
+   publiée (isReal) — les échanges déjà enregistrés restent visibles et annulables en tout temps.
+============================================================ */
+let dragSwapSource = null;      // {code, dayIdx} en cours de glisser (souris)
+let swapPickState = null;       // {code, dayIdx, td} case "prise" par appui long (tactile)
+let longPressTimer = null;
+let longPressTriggered = false;
+
+function showSwapStatus(msg, isError){
+  const el = document.getElementById('swapStatus');
+  if(!msg){ el.style.display='none'; el.textContent=''; return; }
+  el.style.display='block';
+  el.style.color = isError ? 'var(--alert)' : 'var(--ok)';
+  el.textContent = msg;
+  clearTimeout(showSwapStatus._t);
+  showSwapStatus._t = setTimeout(()=>{ el.style.display='none'; }, 3500);
+}
+
+function clearSwapPick(){
+  if(swapPickState && swapPickState.td) swapPickState.td.classList.remove('swap-picked');
+  swapPickState = null;
+}
+
+function attachSwapHandlers(w, isReal){
+  const swapCreationAllowed = !isReal && !!simResult;
+  document.getElementById('swapHint').style.display = swapCreationAllowed ? '' : 'none';
+  clearSwapPick();
+  dragSwapSource = null;
+
+  // Annulation d'un échange existant (rond 🔄) — toujours actif, peu importe simResult.
+  document.querySelectorAll('#bodyRows [data-swap-remove]').forEach(dot=>{
+    dot.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const td = dot.closest('.shift-cell');
+      const code = td.dataset.code, dayIdx = parseInt(td.dataset.day,10);
+      const partner = getSwapPartner(code, dayIdx, w);
+      if(partner){
+        removeSwap(code, partner, dayIdx, w);
+        saveState(); renderTable(); renderChips(); renderSummary();
+        showSwapStatus('Échange annulé.', false);
+      }
+    });
+    dot.addEventListener('touchend', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      dot.dispatchEvent(new Event('click'));
+    }, {passive:false});
+  });
+
+  if(!swapCreationAllowed) return;
+
+  document.querySelectorAll('#bodyRows .shift-cell').forEach(td=>{
+    const code = td.dataset.code;
+    const dayIdx = parseInt(td.dataset.day,10);
+
+    // ----- Souris (PC) : glisser-déposer natif -----
+    td.draggable = true;
+    td.addEventListener('dragstart', (e)=>{
+      dragSwapSource = {code, dayIdx};
+      e.dataTransfer.effectAllowed = 'move';
+      try{ e.dataTransfer.setData('text/plain', code); }catch(err){}
+    });
+    td.addEventListener('dragover', (e)=>{
+      if(dragSwapSource && dragSwapSource.dayIdx===dayIdx) e.preventDefault();
+    });
+    td.addEventListener('dragenter', (e)=>{
+      if(dragSwapSource && dragSwapSource.dayIdx===dayIdx) td.classList.add('swap-picked');
+    });
+    td.addEventListener('dragleave', ()=> td.classList.remove('swap-picked'));
+    td.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      td.classList.remove('swap-picked');
+      if(!dragSwapSource) return;
+      if(dragSwapSource.dayIdx !== dayIdx){
+        showSwapStatus("Échange possible seulement entre 2 cases du même jour.", true);
+        dragSwapSource = null; return;
+      }
+      if(dragSwapSource.code === code){ dragSwapSource = null; return; } // déposé sur soi-même : rien à faire
+      const res = attemptSwap(dragSwapSource.code, code, dayIdx, w);
+      dragSwapSource = null;
+      if(!res.ok) showSwapStatus(res.msg, true);
+      else{
+        saveState(); renderTable(); renderChips(); renderSummary();
+        showSwapStatus(res.undone ? 'Échange annulé.' : 'Échange effectué.', false);
+      }
+    });
+    td.addEventListener('dragend', ()=>{ dragSwapSource = null; });
+
+    // ----- Tactile (mobile) : appui long pour "prendre", puis toucher une 2e case -----
+    td.addEventListener('touchstart', ()=>{
+      longPressTriggered = false;
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(()=>{
+        longPressTriggered = true;
+        if(navigator.vibrate) navigator.vibrate(15);
+        clearSwapPick();
+        swapPickState = {code, dayIdx, td};
+        td.classList.add('swap-picked');
+        showSwapStatus(`${displayName(code)} sélectionné — touche une autre case du même jour pour échanger.`, false);
+      }, 480);
+    }, {passive:true});
+    td.addEventListener('touchmove', ()=> clearTimeout(longPressTimer));
+    td.addEventListener('touchend', (e)=>{
+      clearTimeout(longPressTimer);
+      if(longPressTriggered){ e.preventDefault(); return; } // l'appui long vient de sélectionner : n'active pas le clic normal
+      if(!swapPickState) return; // pas de sélection en cours : laisser le clic normal (cycle congé/maladie) se produire
+      e.preventDefault();
+      if(swapPickState.dayIdx !== dayIdx){
+        showSwapStatus("Échange possible seulement entre 2 cases du même jour.", true);
+        clearSwapPick(); return;
+      }
+      if(swapPickState.code === code){ clearSwapPick(); showSwapStatus('Sélection annulée.', false); return; }
+      const res = attemptSwap(swapPickState.code, code, dayIdx, w);
+      clearSwapPick();
+      if(!res.ok) showSwapStatus(res.msg, true);
+      else{
+        saveState(); renderTable(); renderChips(); renderSummary();
+        showSwapStatus(res.undone ? 'Échange annulé.' : 'Échange effectué.', false);
+      }
+    });
+  });
 }
 
 function renderDayView(){
