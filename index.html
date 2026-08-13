@@ -2116,9 +2116,24 @@ function runSimulation(){
 
   let assignments = [];
 
+  // Renfort de jour (H, I, J) : contrairement aux autres lettres, chacun ne peut être cédulé sur
+  // plus de 3 relèves par semaine — règle propre à H/I/J seulement. Une fois son plafond atteint,
+  // on passe au suivant (H→I→J). Servent de filet de sécurité pour TOUT quart sans JO disponible
+  // ET dont le surtemps a été refusé par tout le monde — avant de tomber en liste d'appel.
+  const eqCount = {H:0, I:0, J:0};
+  let eqCandidates = ['H','I','J'].filter(c=>REAL_NAMES[c] && REAL_NAMES[c].trim());
+  if(eqCandidates.length===0) eqCandidates = ['H']; // repli tant qu'aucun nom n'est configuré
+  function tryEqReleve(u){
+    const pick = eqCandidates.find(c=>eqCount[c] < 3 && !isVacDay(c, u.dayIdx, w));
+    if(!pick) return null;
+    eqCount[pick]++;
+    return {...u, coveredBy: pick, result:{type:'reg', label:`Employé de jour — assignation régulière (EQ RELEVE ${pick})`}};
+  }
+
   // Le surtemps n'est jamais obligatoire : on l'offre par ancienneté, un(e) à la fois, et on
   // attend une confirmation (acceptée/refusée) avant de considérer le quart comblé. Tant que
   // personne n'a accepté, le quart reste "en attente" — voir le tableau de confirmation dynamique.
+  // Si TOUT LE MONDE refuse, on essaie le renfort de jour (H→I→J, plafond 3) avant la liste d'appel.
   function resolveOt(u, extraNote){
     const shiftKey = ymd(u.date)+':'+u.shift;
     if(!otConfirmations[shiftKey]) otConfirmations[shiftKey] = {refused:new Set(), accepted:null};
@@ -2130,7 +2145,9 @@ function runSimulation(){
     }
     const allRefused = candidates.length>0 && candidates.every(c=>conf.refused.has(c));
     if(candidates.length===0 || allRefused){
-      return {...u, coveredBy: null, rank, shiftKey, result:{type:'gap', label:"Aucun volontaire pour le surtemps — liste d'appel du secteur (art. 8.01 f5/f7)"}};
+      const eq = tryEqReleve(u);
+      if(eq) return {...eq, rank, shiftKey, result:{...eq.result, label: eq.result.label + ' (surtemps refusé par tous)'}};
+      return {...u, coveredBy: null, rank, shiftKey, result:{type:'gap', label:"Aucun volontaire pour le surtemps ni renfort de jour disponible — liste d'appel du secteur (art. 8.01 f5/f7)"}};
     }
     return {...u, coveredBy: null, rank, shiftKey, otPending:true, result:{type:'ot', label:`Surtemps — en attente de confirmation (ancienneté${extraNote?', '+extraNote:''}) — rang ${rank} (${RANK_LABELS[rank]})`}};
   }
@@ -2177,23 +2194,13 @@ function runSimulation(){
     // Classement des quarts restants par rang (pires quarts) — les 2 moins pires en surtemps
     stillOpen = stillOpen.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
     stillOpen.sort((a,b)=>a.rank-b.rank);
-    // Renfort de jour (H, I, J) : contrairement aux autres lettres, chacun ne peut être cédulé sur
-    // plus de 3 relèves par semaine — règle propre à H/I/J seulement. Une fois son plafond atteint,
-    // on passe au suivant (H→I→J) ; si tous sont épuisés, le quart tombe en liste d'appel.
-    const eqCount = {H:0, I:0, J:0};
-    let eqCandidates = ['H','I','J'].filter(c=>REAL_NAMES[c] && REAL_NAMES[c].trim());
-    if(eqCandidates.length===0) eqCandidates = ['H']; // repli tant qu'aucun nom n'est configuré
     stillOpen.forEach((u,idx)=>{
       if(idx<2){
         assignments.push(resolveOt(u));
       } else {
-        const pick = eqCandidates.find(c=>eqCount[c] < 3 && !isVacDay(c, u.dayIdx, w));
-        if(pick){
-          eqCount[pick]++;
-          assignments.push({...u, coveredBy: pick, result:{type:'reg', label:`Employé de jour — assignation régulière (EQ RELEVE ${pick})`}});
-        } else {
-          assignments.push({...u, coveredBy:null, result:{type:'gap', label:"Renfort de jour (H/I/J) déjà à son plafond de 3 relèves cette semaine — liste d'appel du secteur"}});
-        }
+        const eq = tryEqReleve(u);
+        if(eq) assignments.push(eq);
+        else assignments.push({...u, coveredBy:null, result:{type:'gap', label:"Renfort de jour (H/I/J) déjà à son plafond de 3 relèves cette semaine — liste d'appel du secteur"}});
       }
     });
   }
@@ -2220,7 +2227,7 @@ function runSimulation(){
    Le surtemps n'est jamais obligatoire — on avance dans la liste tant que personne n'accepte. */
 function renderOtConfirmPanel(assignments, w){
   const panel = document.getElementById('otConfirmPanel');
-  const otShifts = assignments.filter(a=>a.result.type==='ot' || (a.result.type==='gap' && a.shiftKey));
+  const otShifts = assignments.filter(a=>a.result.type==='ot' || ((a.result.type==='gap'||a.result.type==='reg') && a.shiftKey));
   if(otShifts.length===0){ panel.style.display='none'; panel.innerHTML=''; return; }
 
   const wasHidden = panel.style.display==='none' || panel.style.display==='';
@@ -2233,8 +2240,12 @@ function renderOtConfirmPanel(assignments, w){
     const dayLabel = DAY_LABELS[u.dayIdx] + ' ' + fmtDate(u.date,{day:'2-digit',month:'2-digit'});
     const shiftLabel = u.shift==='j' ? '7h–19h' : '19h–7h';
     const noVolunteer = u.result.type==='gap';
+    const wentToEq = u.result.type==='reg';
+    let noteHtml = '';
+    if(noVolunteer) noteHtml = ' <span style="color:var(--alert);">— aucun volontaire, liste d\'appel du secteur</span>';
+    else if(wentToEq) noteHtml = ` <span style="color:var(--ot);">— refusé par tous, passé au renfort de jour (${u.coveredBy})</span>`;
     html += `<div class="ot-shift-block">
-      <div class="ot-shift-title"><b>${dayLabel} · ${shiftLabel}</b> — rang ${u.rank} (${RANK_LABELS[u.rank]}) — remplace ${u.who}${noVolunteer?' <span style="color:var(--alert);">— aucun volontaire, liste d\'appel du secteur</span>':''}</div>`;
+      <div class="ot-shift-title"><b>${dayLabel} · ${shiftLabel}</b> — rang ${u.rank} (${RANK_LABELS[u.rank]}) — remplace ${u.who}${noteHtml}</div>`;
     let resolved = false;
     candidates.forEach((c,idx)=>{
       const isAccepted = conf.accepted===c;
