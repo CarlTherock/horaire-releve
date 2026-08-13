@@ -19,6 +19,9 @@
 <meta name="apple-mobile-web-app-title" content="Horaire Relève">
 <link rel="apple-touch-icon" href="./icon-192-v3.png">
 <link rel="icon" href="./icon-512-v3.png">
+
+<!-- Génération d'image pour le partage (bouton "Partager") -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -710,6 +713,57 @@ footer a{color:var(--text-dim);}
   .print-week-block .shift .tag{ color:inherit; opacity:.8; }
   .print-week-block .letter-chip{ background:#eef1f5 !important; color:#1a1f27; border:1px solid #cfd6de; }
 }
+
+/* ===== MODE CAPTURE (génération d'image pour le bouton "Partager") =====
+   Reprend exactement l'apparence claire/imprimable ci-dessus, mais applicable à l'écran (hors
+   @media print) pendant que html2canvas capture #printRoot — positionné hors champ pour ne pas
+   clignoter à l'écran pendant la génération. */
+body.capture-mode #printRoot{
+  display:block !important; position:fixed; left:-9999px; top:0; background:#fff; padding:20px;
+}
+body.capture-mode .print-week-block{ background:#fff; color:#1a1f27; margin-bottom:14px; }
+body.capture-mode .print-only-header{ display:block; margin-bottom:10px; }
+body.capture-mode .print-only-header .pt{ font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; color:#1a1f27; }
+body.capture-mode .print-only-header .ps{ font-family:'JetBrains Mono',monospace; font-size:11px; color:#5a6472; margin-top:2px; }
+body.capture-mode .print-week-block table.schedule{ width:100%; min-width:900px; border-collapse:collapse; }
+body.capture-mode .print-week-block table.schedule th, body.capture-mode .print-week-block table.schedule td{
+  border:1px solid #cfd6de; padding:6px 4px; color:#1a1f27;
+}
+body.capture-mode .print-week-block table.schedule thead th{
+  background:#eef1f5 !important; color:#3a4452; font-family:'JetBrains Mono',monospace;
+  font-size:10px; text-transform:uppercase;
+}
+body.capture-mode .print-week-block thead th .daynum{ color:#1a1f27; font-family:'Oswald',sans-serif; }
+body.capture-mode .print-week-block td.emp-col, body.capture-mode .print-week-block th.emp-col{
+  background:#f7f9fb !important; text-align:left; padding-left:10px; position:static;
+}
+body.capture-mode .print-week-block .emp-role{ color:#7a8593; }
+body.capture-mode .print-week-block .shift{ border-width:1px; border-radius:5px; padding:4px 2px; font-size:9.5px; line-height:1.25; overflow:visible; }
+body.capture-mode .print-week-block .orig-badge{ position:static; display:inline-block; margin-right:3px; border-color:#fff; vertical-align:middle; }
+body.capture-mode .print-week-block .shift .tag{
+  font-size:8px; display:block; line-height:1.2;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+}
+body.capture-mode .print-week-block .shift.j{ background:#f0ab2e !important; color:#2a1c00; border-color:#b5790f; font-weight:600; }
+body.capture-mode .print-week-block .shift.n{ background:#3f76ad !important; color:#ffffff; border-color:#28517a; font-weight:600; }
+body.capture-mode .print-week-block .shift.jo{ background:#8266dd !important; color:#ffffff; border-color:#5c449e; font-weight:600; }
+body.capture-mode .print-week-block .shift.ot{ background:#e0b93a !important; color:#2a1c00; border-color:#a3860f; font-weight:600; }
+body.capture-mode .print-week-block .shift.vac{ background:#22e076 !important; color:#003318; border-color:#0f9c4e; font-weight:700; }
+body.capture-mode .print-week-block .shift.conge{ background:#5f9e51 !important; color:#ffffff; border-color:#3f6f35; font-weight:600; }
+body.capture-mode .print-week-block .shift.maladie{ background:#c0538a !important; color:#ffffff; border-color:#8a3963; font-weight:600; }
+body.capture-mode .print-week-block .shift.gap{ background:#d64c3f !important; color:#ffffff; border-color:#a3352b; font-weight:600; }
+body.capture-mode .print-week-block .shift.reg{ background:#3f76ad !important; color:#ffffff; border-color:#28517a; font-weight:600; }
+body.capture-mode .print-week-block .shift.off{ color:#8a939e; border:none; background:none; }
+body.capture-mode .print-week-block .letter-chip{ background:#eef1f5 !important; color:#1a1f27; border:1px solid #cfd6de; }
+
+/* ===== MODALE "PARTAGER" ===== */
+#shareModal{display:none;}
+#shareModal.open{
+  display:flex;align-items:center;justify-content:center;
+  position:fixed;inset:0;z-index:9998;
+  background:rgba(6,9,14,0.72);padding:20px;
+}
+#shareModal .lock-box p{margin-bottom:16px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -725,6 +779,16 @@ footer a{color:var(--text-dim);}
       <button type="submit">Déverrouiller</button>
       <div class="lock-error" id="lockError"></div>
     </form>
+  </div>
+</div>
+<div id="shareModal">
+  <div class="lock-box" style="max-width:320px;">
+    <h2 style="margin-bottom:4px;">📤 Partager l'horaire</h2>
+    <p>Choisir la période à inclure dans l'image partagée</p>
+    <button type="button" class="print-btn" id="share1WeekBtn" style="width:100%;margin-bottom:8px;">1 semaine (celle affichée)</button>
+    <button type="button" class="print-btn print-btn-secondary" id="share4WeeksBtn" style="width:100%;">4 semaines (celle-ci + 3 suivantes)</button>
+    <div id="shareStatus" style="font-size:12px;color:var(--text-dim);margin-top:14px;min-height:16px;"></div>
+    <button type="button" class="logout-btn" id="shareCancelBtn" style="margin-top:10px;">Annuler</button>
   </div>
 </div>
 <div class="wrap">
@@ -802,6 +866,7 @@ footer a{color:var(--text-dim);}
         <h2 style="font-size:11px;">Source : 2026_ABCDG.pdf</h2>
         <button class="print-btn" id="printGridBtn" title="Imprimer la grille de cette semaine (paysage, couleur)">🖶 Imprimer</button>
         <button class="print-btn print-btn-secondary" id="print4WeeksBtn" title="Imprimer cette semaine et les 3 suivantes (une par page)">🖶 Imprimer 4 semaines</button>
+        <button class="print-btn print-btn-secondary" id="shareBtn" title="Partager l'horaire en image">📤 Partager</button>
       </div>
     </div>
     <div class="grid-scroll">
@@ -876,6 +941,17 @@ footer a{color:var(--text-dim);}
       <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Paramètres — Ordre d'ancienneté (surtemps)</h2>
       <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">La lettre (A à G) ne reflète pas l'ancienneté réelle — ce n'est qu'une position sur l'horaire maître. Classez ici l'ordre d'ancienneté du plus ancien (haut) au plus jeune (bas) : c'est cet ordre, et non l'ordre E-F-G, qui détermine qui se voit offrir les 2 quarts de surtemps.</p>
       <div id="seniorityList" style="display:flex;flex-direction:column;gap:6px;max-width:420px;"></div>
+    </div>
+
+    <div class="backup-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
+      <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Sauvegarde — Exporter / Importer la configuration</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">Ces données (noms, ancienneté, vacances, surtemps confirmés, historique d'import) ne vivent que dans ce navigateur. Exportez un fichier de sauvegarde de temps en temps, ou avant de vider le cache — et importez-le pour tout restaurer, sur cet appareil ou un autre.</p>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="print-btn" id="exportConfigBtn">💾 Exporter la configuration</button>
+        <button class="print-btn print-btn-secondary" id="importConfigBtn">📂 Importer une configuration</button>
+        <input type="file" id="importConfigInput" accept="application/json,.json" style="display:none;">
+        <span id="backupStatus" style="font-size:12px;color:var(--ok);"></span>
+      </div>
     </div>
   </div>
 
@@ -2723,6 +2799,147 @@ document.getElementById('print4WeeksBtn').onclick = ()=>{
   for(let i=0; i<4 && weekIndex+i<WEEKS.length; i++) indices.push(weekIndex+i);
   printWeeks(indices);
 };
+
+/* ============================================================
+   EXPORT / IMPORT DE LA CONFIGURATION
+   Sauvegarde/restauration de tout ce qui vit dans localStorage (noms, ancienneté, vacances,
+   surtemps confirmés, historique d'import) — pour transférer d'un appareil à l'autre ou se
+   protéger d'un vidage de cache accidentel. Ne contient jamais le mot de passe de déverrouillage
+   (celui-ci n'est de toute façon jamais stocké en clair, seulement son hash, et reste propre à
+   chaque appareil — l'export ne touche pas à "horaireUnlocked").
+============================================================ */
+function exportConfig(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  const statusEl = document.getElementById('backupStatus');
+  if(!raw){
+    statusEl.style.color = 'var(--alert)';
+    statusEl.textContent = "Rien à exporter pour l'instant.";
+    return;
+  }
+  const payload = { exportedAt: new Date().toISOString(), storageKey: STORAGE_KEY, data: JSON.parse(raw) };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = ymd(new Date());
+  a.href = url; a.download = `horaire-releve-config-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  statusEl.style.color = 'var(--ok)';
+  statusEl.textContent = `Configuration exportée (${stamp}).`;
+}
+document.getElementById('exportConfigBtn').onclick = exportConfig;
+
+document.getElementById('importConfigBtn').onclick = ()=> document.getElementById('importConfigInput').click();
+document.getElementById('importConfigInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  const statusEl = document.getElementById('backupStatus');
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      const data = parsed && parsed.data ? parsed.data : parsed; // accepte aussi un export brut
+      if(!data || typeof data !== 'object' || !('vacDays' in data)){
+        throw new Error('format inattendu');
+      }
+      if(!confirm('Remplacer la configuration actuelle de cet appareil par celle du fichier importé ? Cette action écrase noms, vacances, ancienneté et surtemps confirmés en cours.')){
+        e.target.value = '';
+        return;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      statusEl.style.color = 'var(--ok)';
+      statusEl.textContent = 'Configuration importée — rechargement…';
+      setTimeout(()=> location.reload(), 600);
+    }catch(err){
+      statusEl.style.color = 'var(--alert)';
+      statusEl.textContent = "Fichier invalide — ce n'est pas une sauvegarde de cet outil.";
+    }finally{
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* ============================================================
+   PARTAGE DE L'HORAIRE EN IMAGE (bouton "📤 Partager")
+   Réutilise buildPrintWeekBlock() (même contenu que l'impression, surtemps/EQ RELEVE de la
+   simulation en cours inclus) rendu hors-champ en mode capture, puis html2canvas convertit ce
+   rendu en image PNG. Sur téléphone (Web Share API avec fichiers, iOS/Android récents) : ouvre
+   le menu de partage natif. Sinon : téléchargement direct de l'image en repli.
+============================================================ */
+function openShareModal(){
+  document.getElementById('shareStatus').textContent = '';
+  document.getElementById('shareModal').classList.add('open');
+}
+function closeShareModal(){
+  document.getElementById('shareModal').classList.remove('open');
+}
+document.getElementById('shareBtn').onclick = openShareModal;
+document.getElementById('shareCancelBtn').onclick = closeShareModal;
+
+async function generateShareCanvas(indices){
+  document.getElementById('printRoot').innerHTML = indices.map(buildPrintWeekBlock).join('');
+  document.body.classList.add('capture-mode');
+  await new Promise(r=>setTimeout(r, 60)); // laisse le temps au layout de se stabiliser hors-champ
+  try{
+    const target = document.getElementById('printRoot');
+    const canvas = await html2canvas(target, {backgroundColor:'#ffffff', scale:2, useCORS:true});
+    return canvas;
+  }finally{
+    document.body.classList.remove('capture-mode');
+  }
+}
+
+async function shareSchedule(weeksCount){
+  const statusEl = document.getElementById('shareStatus');
+  if(typeof html2canvas === 'undefined'){
+    statusEl.style.color = 'var(--alert)';
+    statusEl.textContent = "La génération d'image n'a pas pu se charger (connexion internet requise la première fois). Réessaie.";
+    return;
+  }
+  statusEl.style.color = 'var(--text-dim)';
+  statusEl.textContent = 'Génération de l\'image…';
+  const indices = [];
+  for(let i=0; i<weeksCount && weekIndex+i<WEEKS.length; i++) indices.push(weekIndex+i);
+  let canvas;
+  try{
+    canvas = await generateShareCanvas(indices);
+  }catch(err){
+    statusEl.style.color = 'var(--alert)';
+    statusEl.textContent = "Échec de la génération de l'image.";
+    return;
+  }
+  canvas.toBlob(async (blob)=>{
+    if(!blob){
+      statusEl.style.color = 'var(--alert)';
+      statusEl.textContent = "Échec de la génération de l'image.";
+      return;
+    }
+    const w = WEEKS[weekIndex];
+    const filename = `horaire-releve-${ymd(w.start)}${weeksCount>1?`-${weeksCount}sem`:''}.png`;
+    const file = new File([blob], filename, {type:'image/png'});
+    const shareData = { files:[file], title:'Horaire relève entretien', text:`Horaire relève entretien — semaine du ${fmtDate(w.start,{day:'2-digit',month:'long',year:'numeric'})}` };
+    if(navigator.canShare && navigator.canShare(shareData)){
+      try{
+        await navigator.share(shareData);
+        closeShareModal();
+      }catch(err){
+        // annulation par l'utilisateur ou échec — on laisse la modale ouverte, pas d'erreur affichée
+        statusEl.textContent = '';
+      }
+    }else{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      statusEl.style.color = 'var(--ok)';
+      statusEl.textContent = 'Partage direct indisponible sur ce navigateur — image téléchargée à la place.';
+    }
+  }, 'image/png');
+}
+document.getElementById('share1WeekBtn').onclick = ()=> shareSchedule(1);
+document.getElementById('share4WeeksBtn').onclick = ()=> shareSchedule(4);
 
 /* Bouton "Relève seulement" : filtre la grille (même format, mêmes colonnes) pour ne garder que
    les employés ayant au moins un des 14 quarts J/N travaillés cette semaine — comblement normal,
