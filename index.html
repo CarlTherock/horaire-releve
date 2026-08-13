@@ -889,29 +889,34 @@ let REAL_NAMES = {
   D:"Roy, François", G:"Desrochers, Carl", F:"Lachance, Loïc",
   E:"Lapierre, Frédéric", H:"Bonenfant, Alexis"
 };
-/* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que si on leur a
-   assigné un nom ET qu'ils ont réellement un quart (ou une absence marquée — vacances/congé/
-   maladie) cette semaine-là — sinon ils restent masqués pour ne pas encombrer l'outil la plupart
-   des semaines. Une absence marquée compte comme "activité" : ça reste visible pour qu'on sache
-   pourquoi le comblement est passé au suivant (H→I→J), sans jamais remettre l'horaire en doute. */
+/* Affiche le nom réel de l'employé, ou "À déterminer" par défaut pour H/I/J tant qu'aucun nom
+   n'a été assigné — le fonctionnement (cascade de comblement) n'attend jamais d'avoir un nom. */
+function displayName(code){
+  if(REAL_NAMES[code] && REAL_NAMES[code].trim()) return REAL_NAMES[code];
+  if(['H','I','J'].includes(code)) return 'À déterminer';
+  return code;
+}
+/* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que s'ils ont
+   réellement un quart (ou une absence marquée — vacances/congé/maladie) cette semaine-là — sinon
+   ils restent masqués pour ne pas encombrer l'outil la plupart des semaines. Un nom n'est PAS un
+   prérequis : la cascade de comblement (H→I→J) fonctionne même sans nom (affiché "À déterminer").
+   Une absence marquée compte comme "activité" : ça reste visible pour qu'on sache pourquoi le
+   comblement est passé au suivant, sans jamais remettre l'horaire en doute. */
 function activeEmployees(){
   return EMPLOYEES.filter(emp=>{
     if(!['H','I','J'].includes(emp.code)) return true;
-    if(!(REAL_NAMES[emp.code] && REAL_NAMES[emp.code].trim())) return false;
     for(let i=0;i<7;i++){
       if(computeCell(emp.code, i).cls !== 'off') return true;
     }
     return false;
   });
 }
-/* Employés nommés, SANS exiger d'activité cette semaine-là — utilisé par le panneau de sélection
+/* Tous les employés, SANS exiger d'activité cette semaine-là — utilisé par le panneau de sélection
    des vacances/absences, pour qu'on puisse justement cliquer "Vacances" sur H/I/J la première fois
-   (sinon ils n'apparaîtraient jamais dans ce panneau pour qu'on les y marque). */
+   (sinon ils n'apparaîtraient jamais dans ce panneau pour qu'on les y marque). H/I/J y figurent
+   toujours, même sans nom, pour ne jamais bloquer le fonctionnement de la cascade. */
 function namedEmployees(){
-  return EMPLOYEES.filter(emp=>{
-    if(!['H','I','J'].includes(emp.code)) return true;
-    return !!(REAL_NAMES[emp.code] && REAL_NAMES[emp.code].trim());
-  });
+  return EMPLOYEES;
 }
 
 /* Ordre d'ancienneté de métier (du plus ancien au plus jeune) — utilisé pour l'offre de surtemps.
@@ -1465,7 +1470,7 @@ function buildScheduleHTML(w, isReal){
 
   let bodyHTML = '';
   activeEmployees().forEach(emp=>{
-    let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
+    let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${displayName(emp.code)}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
     const clickable = !isReal && !['H','I','J'].includes(emp.code);
     w.days.forEach((day,i)=>{
       const c = computeCell(emp.code, i);
@@ -1513,7 +1518,7 @@ function renderDayView(){
     div.className = 'day-card ' + c.cls + (clickable?' toggle-vac':'');
     div.innerHTML = `
       <span class="letter-chip">${emp.code}</span>
-      <div class="info"><div>${REAL_NAMES[emp.code] || emp.code}</div><div class="role">${emp.role}</div></div>
+      <div class="info"><div>${displayName(emp.code)}</div><div class="role">${emp.role}</div></div>
       <div class="status">${badgeHtml}<span class="hours">${c.hours}</span>${c.tag?`<span class="tag">${t.short}</span>`:''}</div>
     `;
     if(clickable){
@@ -1905,7 +1910,7 @@ function renderChips(){
   activeEmployees().map(e=>e.code).forEach(code=>{
     const row = document.createElement('div');
     row.className = 'vac-row';
-    const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
+    const name = displayName(code).split(',')[0];
     const workDays = w.days.map((day,i)=>i).filter(i=>worksThisDay(code,i,w));
     const allWorkConge = workDays.length>0 && workDays.every(i=>vacType(code,i,w)==='conge');
     const allWorkMaladie = workDays.length>0 && workDays.every(i=>vacType(code,i,w)==='maladie');
@@ -2121,8 +2126,8 @@ function runSimulation(){
   // on passe au suivant (H→I→J). Servent de filet de sécurité pour TOUT quart sans JO disponible
   // ET dont le surtemps a été refusé par tout le monde — avant de tomber en liste d'appel.
   const eqCount = {H:0, I:0, J:0};
-  let eqCandidates = ['H','I','J'].filter(c=>REAL_NAMES[c] && REAL_NAMES[c].trim());
-  if(eqCandidates.length===0) eqCandidates = ['H']; // repli tant qu'aucun nom n'est configuré
+  let eqCandidates = ['H','I','J']; // toujours disponibles pour la cascade, même sans nom assigné (affiché "À déterminer" au besoin)
+  if(eqCandidates.length===0) eqCandidates = ['H']; // filet de sécurité (ne devrait jamais se produire)
   function tryEqReleve(u){
     const pick = eqCandidates.find(c=>eqCount[c] < 3 && !isVacDay(c, u.dayIdx, w));
     if(!pick) return null;
