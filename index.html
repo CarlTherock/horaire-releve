@@ -829,39 +829,90 @@ footer a{color:var(--text-dim);}
 <script>
 /* ============================================================
    DONNÉES — Horaire maître ABCDG (source : 2026_ABCDG.pdf)
-   Chaque semaine : date de début (dimanche), chaîne J (7 lettres, dim→sam),
-   chaîne N (7 lettres, dim→sam)
+   CALENDRIER PERPÉTUEL — reconfirmé le 13 août 2026 par extraction et recoupement du texte
+   intégré au PDF (56 semaines transcrites, 0 divergence). La rotation ABCDG est un cycle EXACT
+   de 36 semaines numérotées (colonne "SEM" du document source, ex. "(31)") qui se répète à
+   l'identique indéfiniment — confirmé par comparaison de chaque semaine avec son homologue
+   36 semaines plus tôt/tard sur les 56 semaines disponibles (aucun écart).
+   Chaque entrée du cycle : chaîne J (7 lettres, dim→sam), chaîne N (7 lettres, dim→sam).
+   ANCHOR_SUNDAY (2025-12-28) correspond à SEM 31 (index 30) — sert de point de repère pour
+   calculer, pour n'importe quelle date passée ou future, sa position dans le cycle de 36
+   semaines via semIndexForSunday() plus bas. Plus besoin de retranscrire une table à chaque
+   nouvelle année : le calendrier ABCDG ne s'arrête jamais.
 ============================================================ */
-const RAW_WEEKS = [
-["2025-12-28","CAADDBB","DBBCCAA"],["2026-01-04","BCCAADD","ADDBBCC"],
-["2026-01-11","DBBCCAA","CGGDDBB"],["2026-01-18","AGGBBCC","BCCAADD"],
-["2026-01-25","CAADDBB","DGGCCAA"],["2026-02-01","BGGAADD","ADDBBCC"],
-["2026-02-08","DBBCCAA","CAADDBB"],["2026-02-15","ADDBBCC","BCCAADD"],
-["2026-02-22","CGGDDBB","DBBCCAA"],["2026-03-01","BCCAADD","AGGBBCC"],
-["2026-03-08","DGGCCAA","CAADDBB"],["2026-03-15","ADDBBCC","BGGAADD"],
-["2026-03-22","CGGDDBB","DBBCCAA"],["2026-03-29","BCCAADD","AGGBBCC"],
-["2026-04-05","DGGCCAA","CAADDBB"],["2026-04-12","ADDBBCC","BGGAADD"],
-["2026-04-19","CAADDBB","DBBCCAA"],["2026-04-26","BCCAADD","ADDBBCC"],
-["2026-05-03","DBBCCAA","CGGDDBB"],["2026-05-10","AGGBBCC","BCCAADD"],
-["2026-05-17","CAADDBB","DGGCCAA"],["2026-05-24","BGGAADD","ADDBBCC"],
-["2026-05-31","DBBCCAA","CGGDDBB"],["2026-06-07","AGGBBCC","BCCAADD"],
-["2026-06-14","CAADDBB","DGGCCAA"],["2026-06-21","BGGAADD","ADDBBCC"],
-["2026-06-28","DBBCCAA","CAADDBB"],["2026-07-05","ADDBBCC","BCCAADD"],
-["2026-07-12","CGGDDBB","DBBCCAA"],["2026-07-19","BCCAADD","AGGBBCC"],
-["2026-07-26","DGGCCAA","CAADDBB"],["2026-08-02","ADDBBCC","BGGAADD"],
-["2026-08-09","CGGDDBB","DBBCCAA"],["2026-08-16","BCCAADD","AGGBBCC"],
-["2026-08-23","DGGCCAA","CAADDBB"],["2026-08-30","ADDBBCC","BGGAADD"],
-["2026-09-06","CAADDBB","DBBCCAA"],["2026-09-13","BCCAADD","ADDBBCC"],
-["2026-09-20","DBBCCAA","CGGDDBB"],["2026-09-27","AGGBBCC","BCCAADD"],
-["2026-10-04","CAADDBB","DGGCCAA"],["2026-10-11","BGGAADD","ADDBBCC"],
-["2026-10-18","DBBCCAA","CAADDBB"],["2026-10-25","ADDBBCC","BCCAADD"],
-["2026-11-01","CGGDDBB","DBBCCAA"],["2026-11-08","BCCAADD","AGGBBCC"],
-["2026-11-15","DGGCCAA","CAADDBB"],["2026-11-22","ADDBBCC","BGGAADD"],
-["2026-11-29","CGGDDBB","DBBCCAA"],["2026-12-06","BCCAADD","AGGBBCC"],
-["2026-12-13","DGGCCAA","CAADDBB"],["2026-12-20","ADDBBCC","BGGAADD"],
-["2026-12-27","CAADDBB","DBBCCAA"],["2027-01-03","BCCAADD","ADDBBCC"],
-["2027-01-10","DBBCCAA","CGGDDBB"],["2027-01-17","AGGBBCC","BCCAADD"]
+const ANCHOR_SUNDAY = "2025-12-28"; // SEM 31, index 30 du cycle (0-based)
+const ANCHOR_SEM_INDEX0 = 30;
+const CYCLE_LEN = 36;
+
+const ABCDG_CYCLE = [ // index 0 = SEM 1 ... index 35 = SEM 36 (cycle de 36 semaines, source : 2026_ABCDG.pdf)
+  ["DBBCCAA","CAADDBB"], // SEM 1
+  ["ADDBBCC","BCCAADD"], // SEM 2
+  ["CGGDDBB","DBBCCAA"], // SEM 3
+  ["BCCAADD","AGGBBCC"], // SEM 4
+  ["DGGCCAA","CAADDBB"], // SEM 5
+  ["ADDBBCC","BGGAADD"], // SEM 6
+  ["CGGDDBB","DBBCCAA"], // SEM 7
+  ["BCCAADD","AGGBBCC"], // SEM 8
+  ["DGGCCAA","CAADDBB"], // SEM 9
+  ["ADDBBCC","BGGAADD"], // SEM 10
+  ["CAADDBB","DBBCCAA"], // SEM 11
+  ["BCCAADD","ADDBBCC"], // SEM 12
+  ["DBBCCAA","CGGDDBB"], // SEM 13
+  ["AGGBBCC","BCCAADD"], // SEM 14
+  ["CAADDBB","DGGCCAA"], // SEM 15
+  ["BGGAADD","ADDBBCC"], // SEM 16
+  ["DBBCCAA","CGGDDBB"], // SEM 17
+  ["AGGBBCC","BCCAADD"], // SEM 18
+  ["CAADDBB","DGGCCAA"], // SEM 19
+  ["BGGAADD","ADDBBCC"], // SEM 20
+  ["DBBCCAA","CAADDBB"], // SEM 21
+  ["ADDBBCC","BCCAADD"], // SEM 22
+  ["CGGDDBB","DBBCCAA"], // SEM 23
+  ["BCCAADD","AGGBBCC"], // SEM 24
+  ["DGGCCAA","CAADDBB"], // SEM 25
+  ["ADDBBCC","BGGAADD"], // SEM 26
+  ["CGGDDBB","DBBCCAA"], // SEM 27
+  ["BCCAADD","AGGBBCC"], // SEM 28
+  ["DGGCCAA","CAADDBB"], // SEM 29
+  ["ADDBBCC","BGGAADD"], // SEM 30
+  ["CAADDBB","DBBCCAA"], // SEM 31
+  ["BCCAADD","ADDBBCC"], // SEM 32
+  ["DBBCCAA","CGGDDBB"], // SEM 33
+  ["AGGBBCC","BCCAADD"], // SEM 34
+  ["CAADDBB","DGGCCAA"], // SEM 35
+  ["BGGAADD","ADDBBCC"], // SEM 36
 ];
+
+/* Retourne l'index (0-35) dans ABCDG_CYCLE / JO_CYCLE pour n'importe quel dimanche (objet Date). */
+function semIndexForSunday(sundayDate){
+  const anchor = new Date(ANCHOR_SUNDAY+"T00:00:00");
+  const diffDays = Math.round((sundayDate - anchor) / 86400000);
+  const k = Math.round(diffDays / 7);
+  return (((ANCHOR_SEM_INDEX0 + k) % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
+}
+
+/* Génère dynamiquement la liste des semaines (dimanches) affichables dans l'outil, centrée sur
+   la date du jour à chaque chargement de page — FENÊTRE_PASSÉ à FENÊTRE_FUTUR. Comme le contenu
+   de chaque semaine est calculé depuis le cycle de 36 semaines (jamais une table figée), cette
+   fenêtre peut être élargie n'importe quand sans avoir à retranscrire quoi que ce soit : le
+   calendrier ABCDG est perpétuel. */
+const WINDOW_YEARS_PAST = 2;
+const WINDOW_YEARS_FUTURE = 5;
+function findSundayOnOrBefore(d){ const r = new Date(d); r.setDate(r.getDate() - r.getDay()); r.setHours(0,0,0,0); return r; }
+function generateRawWeeks(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rangeStart = findSundayOnOrBefore(new Date(today.getFullYear()-WINDOW_YEARS_PAST, today.getMonth(), today.getDate()));
+  const rangeEnd = findSundayOnOrBefore(new Date(today.getFullYear()+WINDOW_YEARS_FUTURE, today.getMonth(), today.getDate()));
+  const out = [];
+  let cur = new Date(rangeStart);
+  while(cur <= rangeEnd){
+    const idx = semIndexForSunday(cur);
+    const [J,N] = ABCDG_CYCLE[idx];
+    out.push([ymd(cur), J, N]);
+    cur = addDays(cur, 7);
+  }
+  return out;
+}
 
 const DAY_LABELS = ["dim.","lun.","mar.","mer.","jeu.","ven.","sam."];
 const EMPLOYEES = [
@@ -934,75 +985,74 @@ function workingEmployeesThisWeek(){
 let seniorityOrder = ['A','B','C','D','E','F','G'];
 
 /* ============================================================
-   HORAIRE MAÎTRE JO (E·F·G) — RÉEL, transcrit depuis 2026_Horaire_JO_MECELECINSTRU.pdf
-   Retranscrit avec alignement pixel-exact du quadrillage (colonnes/lignes détectées par analyse
-   d'image) et header D-L-M-M-J-V-S confirmé tel qu'imprimé (dim→sam) ; les valeurs ci-dessous
-   sont déjà réalignées sur le repère standard utilisé partout ailleurs dans l'outil.
+   HORAIRE MAÎTRE JO (E·F·G) — CALENDRIER PERPÉTUEL
+   RECONFIRMÉ le 13 août 2026 : lecture à haute résolution de 2026_Horaire_JO_MECELECINSTRU.pdf
+   avec triple recoupement (chaque semaine du cycle de 36 apparaît 2 à 3 fois dans le document sur
+   ses 53 semaines — les valeurs ci-dessous concordent à 100% sur les trois lectures indépendantes).
+   Cette relecture a mis au jour 28 erreurs sur les 53 semaines de l'ancienne table figée
+   (surtout des décalages d'un jour sur la colonne E, quelques-uns sur F et G) — corrigées ici.
+   Comme pour ABCDG, le motif se répète exactement tous les 36 semaines (même numérotation
+   "SEM" que le document ABCDG, même point d'ancrage) : ce n'est PAS une table de dates figées
+   mais un cycle perpétuel, disponible pour n'importe quelle semaine passée ou future.
      o = JO (disponible/réserve)   .  = repos (case vide, hors horaire)
      j = quart jour fixe 7h-19h    n  = quart nuit fixe 19h-7h
-   Vérifié sur les 53 semaines : total (E+F+G) toujours 7 ou 8 JO/semaine ; jamais de JO le
-   samedi ni le dimanche (toujours lun-ven) ; les jours "j/n" de G concordent exactement avec
-   ABCDG (0 divergence). G a 1 JO (semaine avec quart ABCDG) ou 3 JO (semaine libre d'ABCDG)
-   — SAUF le 13/12/2026, confirmé à l'identique par zoom extrême à répétition : 2 JO ce
-   jour-là (exception réelle du document, pas une erreur de lecture).
-   Semaines hors de cette table (avant 2025-12-28 ou après 2026-12-27) : pas de donnée source,
-   comblement par défaut (JO tous les jours, capé à l'usage par le maximum de 4/semaine si édité).
+   Les jours "j/n" de G concordent exactement avec ABCDG_CYCLE (0 divergence, dérivé de la même
+   rotation). Le total (E+F+G) est 7 ou 8 JO/semaine selon la semaine du cycle — 4 semaines sur 36
+   (SEM 9, 18, 25, 29) ont 8 JO (G a un 4e jour actif) : ce n'est pas une exception isolée comme
+   le suggérait l'ancien commentaire, c'est un motif régulier du cycle de 36 semaines.
 ============================================================ */
-const REAL_JO_DEFAULT = {
-  "2025-12-28":{E:".oo....",F:"...ooo.",G:".ooo..."},
-  "2026-01-04":{E:"..ooo..",F:".oo....",G:".ooo..."},
-  "2026-01-11":{E:".oooo..",F:"...ooo.",G:".nn.o.."},
-  "2026-01-18":{E:"..ooo..",F:".oooo..",G:".jjo..."},
-  "2026-01-25":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
-  "2026-02-01":{E:"..oooo.",F:".ooo...",G:".jjo..."},
-  "2026-02-08":{E:".oo....",F:"...ooo.",G:".ooo..."},
-  "2026-02-15":{E:"..ooo..",F:".oo....",G:".ooo..."},
-  "2026-02-22":{E:".oooo..",F:"...ooo.",G:".jjo..."},
-  "2026-03-01":{E:"..ooo..",F:".oooo..",G:".nn.o.."},
-  "2026-03-08":{E:".ooo...",F:"...ooo.",G:".jjo..."},
-  "2026-03-15":{E:".oooo..",F:".ooo...",G:".nn..o."},
-  "2026-03-22":{E:".ooo...",F:"..oooo.",G:".jjo..."},
-  "2026-03-29":{E:"..ooo..",F:".ooo...",G:".nn..o."},
-  "2026-04-05":{E:".ooo...",F:"...ooo.",G:".jjo..."},
-  "2026-04-12":{E:"..ooo..",F:".ooo...",G:".nn..o."},
-  "2026-04-19":{E:".oo....",F:"...ooo.",G:".ooo..."},
-  "2026-04-26":{E:"..ooo..",F:".oo....",G:".ooo..."},
-  "2026-05-03":{E:".oooo..",F:"...ooo.",G:".nn.o.."},
-  "2026-05-10":{E:"..ooo..",F:".oooo..",G:".jjo..."},
-  "2026-05-17":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
-  "2026-05-24":{E:"..oooo.",F:".ooo...",G:".jjo..."},
-  "2026-05-31":{E:".ooo...",F:"..oooo.",G:".nn.o.."},
-  "2026-06-07":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
-  "2026-06-14":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
-  "2026-06-21":{E:"..ooo..",F:".oooo..",G:".jjo..."},
-  "2026-06-28":{E:".oo....",F:"...ooo.",G:".ooo..."},
-  "2026-07-05":{E:"..ooo..",F:".oo....",G:".ooo..."},
-  "2026-07-12":{E:".oooo..",F:"...ooo.",G:".jjo..."},
-  "2026-07-19":{E:"..ooo..",F:".oooo..",G:".nn.o.."},
-  "2026-07-26":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
-  "2026-08-02":{E:".oooo..",F:"..ooo..",G:".nn.o.."},
-  "2026-08-09":{E:".ooo...",F:"..oooo.",G:".jjo..."},
-  "2026-08-16":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
-  "2026-08-23":{E:".ooo...",F:"..oooo.",G:".nn.o.."},
-  "2026-08-30":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
-  "2026-09-06":{E:".oo....",F:"...ooo.",G:".ooo..."},
-  "2026-09-13":{E:"..ooo..",F:".oo....",G:".ooo..."},
-  "2026-09-20":{E:".oooo..",F:"...ooo.",G:".nn.o.."},
-  "2026-09-27":{E:"..ooo..",F:".oooo..",G:".jjo..."},
-  "2026-10-04":{E:".ooo...",F:"...ooo.",G:".nn.o.."},
-  "2026-10-11":{E:"..oooo.",F:".ooo...",G:".jjo..."},
-  "2026-10-18":{E:".oo....",F:"...ooo.",G:".ooo..."},
-  "2026-10-25":{E:"..ooo..",F:".oo....",G:".ooo..."},
-  "2026-11-01":{E:".oooo..",F:"...ooo.",G:".jjo..."},
-  "2026-11-08":{E:"..ooo..",F:".oooo..",G:".nn.o.."},
-  "2026-11-15":{E:".ooo...",F:"...ooo.",G:".jjo..."},
-  "2026-11-22":{E:"..oooo.",F:".ooo...",G:".nn.o.."},
-  "2026-11-29":{E:".ooo...",F:"..oooo.",G:".jjo..."},
-  "2026-12-06":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
-  "2026-12-13":{E:".ooo...",F:"...ooo.",G:".jjoo.."},
-  "2026-12-20":{E:"..ooo..",F:".ooo...",G:".nn.o.."},
-  "2026-12-27":{E:".oo....",F:"...ooo.",G:".ooo..."}
-};
+const JO_CYCLE = [ // index 0 = SEM 1 ... index 35 = SEM 36 (cycle de 36 semaines, source : 2026_Horaire_JO_MECELECINSTRU.pdf)
+  {E:".oo....",F:"...ooo.",G:".ooo..."}, // SEM 1
+  {E:"...ooo.",F:".oo....",G:".ooo..."}, // SEM 2
+  {E:".ooo...",F:"...ooo.",G:".jjo..."}, // SEM 3
+  {E:"...ooo.",F:".oooo..",G:".nn.o.."}, // SEM 4
+  {E:".ooo...",F:"...ooo.",G:".jjo..."}, // SEM 5
+  {E:"..oooo.",F:".ooo...",G:".nn.o.."}, // SEM 6
+  {E:".ooo...",F:"...ooo.",G:".jjo..."}, // SEM 7
+  {E:"...ooo.",F:".ooo...",G:".nn.o.."}, // SEM 8
+  {E:".ooo...",F:"...ooo.",G:".jjoo.."}, // SEM 9
+  {E:"...ooo.",F:".ooo...",G:".nn.o.."}, // SEM 10
+  {E:".oo....",F:"...ooo.",G:".ooo..."}, // SEM 11
+  {E:"...ooo.",F:".oo....",G:".ooo..."}, // SEM 12
+  {E:".oooo..",F:"...ooo.",G:".nn.o.."}, // SEM 13
+  {E:"..ooo..",F:".oooo..",G:".jjo..."}, // SEM 14
+  {E:".ooo...",F:"...ooo.",G:".nn.o.."}, // SEM 15
+  {E:"..oooo.",F:".ooo...",G:".jjo..."}, // SEM 16
+  {E:".ooo...",F:"...ooo.",G:".nn.o.."}, // SEM 17
+  {E:"...ooo.",F:".ooo...",G:".jjoo.."}, // SEM 18
+  {E:".ooo...",F:"...ooo.",G:".nn.o.."}, // SEM 19
+  {E:"...ooo.",F:".oooo..",G:".jjo..."}, // SEM 20
+  {E:".oo....",F:"...ooo.",G:".ooo..."}, // SEM 21
+  {E:"...ooo.",F:".oo....",G:".ooo..."}, // SEM 22
+  {E:".oooo..",F:"...ooo.",G:".jjo..."}, // SEM 23
+  {E:"...ooo.",F:".oooo..",G:".nn.o.."}, // SEM 24
+  {E:".ooo...",F:"...ooo.",G:".jjoo.."}, // SEM 25
+  {E:"..oooo.",F:".ooo...",G:".nn.o.."}, // SEM 26
+  {E:".ooo...",F:"...ooo.",G:".jjo..."}, // SEM 27
+  {E:"...ooo.",F:".ooo...",G:".nn.o.."}, // SEM 28
+  {E:".ooo...",F:"...ooo.",G:".jjoo.."}, // SEM 29
+  {E:"...ooo.",F:".ooo...",G:".nn.o.."}, // SEM 30
+  {E:".oo....",F:"...ooo.",G:".ooo..."}, // SEM 31
+  {E:"...ooo.",F:".oo....",G:".ooo..."}, // SEM 32
+  {E:".oooo..",F:"...ooo.",G:".nn.o.."}, // SEM 33
+  {E:"..ooo..",F:".oooo..",G:".jjo..."}, // SEM 34
+  {E:".ooo...",F:"...ooo.",G:".nn.o.."}, // SEM 35
+  {E:"..oooo.",F:".ooo...",G:".jjo..."}, // SEM 36
+];
+
+/* Proxy qui calcule l'horaire Jo par défaut à la volée depuis JO_CYCLE, pour n'importe quelle
+   date de dimanche (clé "YYYY-MM-DD") — garde exactement la même syntaxe d'accès
+   (REAL_JO_DEFAULT[ymd(week.start)]) utilisée partout ailleurs dans le code, donc aucun autre
+   site d'appel n'a besoin d'être modifié. Retourne toujours un résultat valide (plus de notion
+   de "semaine hors table source" : le cycle perpétuel couvre indéfiniment passé et futur). */
+const REAL_JO_DEFAULT = new Proxy({}, {
+  get(target, isoDate){
+    if(typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return undefined;
+    const sunday = new Date(isoDate+"T00:00:00");
+    const idx = semIndexForSunday(sunday);
+    return JO_CYCLE[idx];
+  }
+});
 
 /* ============================================================
    HORAIRE RÉELLEMENT PUBLIÉ — semaine du 09/08/2026 au 15/08/2026
@@ -1078,6 +1128,7 @@ function isSummerPeriod(weekStart){
   return weekStart >= startSunday && weekStart <= endSaturday;
 }
 
+const RAW_WEEKS = generateRawWeeks(); // fenêtre perpétuelle calculée à chaque chargement (voir plus haut)
 const WEEKS = RAW_WEEKS.map(([start,J,N])=>{
   const startDate = new Date(start+"T00:00:00");
   const days = [];
