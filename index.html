@@ -415,6 +415,28 @@ tr:hover td.emp-col{background:#1a222d;}
 }
 .reset-btn:hover{color:var(--text);border-color:#3a4a5e;}
 
+.vac-drop-zone{
+  border:2px dashed var(--line);border-radius:10px;padding:28px 16px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;
+  background:var(--panel-2);transition:.15s;text-align:center;
+}
+.vac-drop-zone:hover, .vac-drop-zone.drag-over{
+  border-color:#5a7a9a;background:rgba(90,122,154,0.08);
+}
+.vac-drop-icon{font-size:26px;}
+.vac-drop-text{font-size:12.5px;color:var(--text-dim);}
+.vac-history-item{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12px;
+}
+.vac-history-item .vh-date{font-family:'JetBrains Mono',monospace;color:var(--text-dim2);flex:none;}
+.vac-history-item .vh-name{color:var(--text);flex:1;font-weight:500;}
+.vac-history-item .vh-badge{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;padding:2px 7px;border-radius:10px;flex:none;
+}
+.vac-history-item .vh-badge.active{background:rgba(79,174,126,0.18);color:var(--ok);}
+.vac-history-item .vh-badge.inactive{background:var(--panel-3);color:var(--text-dim2);}
+
 .result-box{
   background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:16px;
   font-size:13px;line-height:1.65;min-height:120px;
@@ -635,6 +657,7 @@ footer a{color:var(--text-dim);}
   .print-week-block .letter-chip{ background:#eef1f5 !important; color:#1a1f27; border:1px solid #cfd6de; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -774,11 +797,20 @@ footer a{color:var(--text-dim);}
     </div>
 
     <div class="vac-calendar-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
-      <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Calendrier de vacances 2026 — Relève usine</h2>
-      <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">Transcrit à la main depuis le calendrier PDF officiel (image scannée, non lisible automatiquement par l'outil) pour A, B, C, D, F, G. Vérifiez la liste ci-dessous avant d'appliquer — ça marque chaque semaine comme <b>Vacances</b> pour l'employé concerné.</p>
-      <div id="vacCalendarPreview" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);line-height:1.9;margin-bottom:12px;"></div>
-      <button class="print-btn" id="applyVacCalendarBtn">Appliquer le calendrier de vacances 2026</button>
-      <span id="vacCalendarStatus" style="margin-left:10px;font-size:12px;color:var(--ok);"></span>
+      <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Calendrier de vacances — importer un fichier Excel</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">Glissez-déposez le fichier Excel (.xlsx) du calendrier de vacances de l'année — l'outil l'analyse automatiquement, identifie la période estivale (couleur de case + en-tête « ÉTÉ »/« PRÉ-ÉTÉ ») et le reste de l'année, puis prépare les semaines de vacances par employé.</p>
+      <div id="vacDropZone" class="vac-drop-zone">
+        <span class="vac-drop-icon">📅</span>
+        <span class="vac-drop-text">Glissez le fichier Excel ici, ou cliquez pour le sélectionner</span>
+        <input type="file" id="vacFileInput" accept=".xlsx,.xls" style="display:none;">
+      </div>
+      <div id="vacCalendarPreview" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);line-height:1.9;margin:12px 0;"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="print-btn" id="applyVacCalendarBtn" style="display:none;">Appliquer le calendrier de vacances</button>
+        <button class="reset-btn" id="resetVacCalendarBtn" style="display:none;">Réinitialiser la cédule de vacances</button>
+        <span id="vacCalendarStatus" style="font-size:12px;color:var(--ok);"></span>
+      </div>
+      <div id="vacImportHistory" style="margin-top:16px;"></div>
     </div>
 
     <div class="seniority-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
@@ -1185,7 +1217,9 @@ function saveState(){
       vacDays: Array.from(vacDays.entries()),
       unavailableJo: Array.from(unavailableJo),
       otConfirmations: otConfSerializable,
-      realNames: REAL_NAMES
+      realNames: REAL_NAMES,
+      vacImportHistory,
+      importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])]))
     }));
   }catch(e){}
 }
@@ -1203,6 +1237,11 @@ function loadState(){
     if(Number.isInteger(s.currentDayIdx) && s.currentDayIdx>=0 && s.currentDayIdx<=6) currentDayIdx = s.currentDayIdx;
     if(s.realNames && typeof s.realNames==='object'){
       REAL_NAMES = s.realNames;
+    }
+    if(Array.isArray(s.vacImportHistory)) vacImportHistory = s.vacImportHistory;
+    if(s.importedVacKeys && typeof s.importedVacKeys==='object'){
+      importedVacKeys = {};
+      Object.keys(s.importedVacKeys).forEach(id=>{ importedVacKeys[id] = new Set(s.importedVacKeys[id]); });
     }
     if(Array.isArray(s.seniorityOrder) && s.seniorityOrder.length===seniorityOrder.length
        && s.seniorityOrder.every(c=>seniorityOrder.includes(c))){
@@ -1538,50 +1577,285 @@ function renderNamesEditor(){
   });
 }
 
-/* Calendrier de vacances 2026 — Relève usine, transcrit manuellement depuis le PDF officiel
-   (image scannée, sans texte extractible — donc pas de lecture automatique possible dans le
-   navigateur). Semaines identifiées par leur date de FIN (samedi) ; converties ci-dessous en
-   date de DÉBUT (dimanche) pour matcher WEEKS[]. Chaque semaine listée = une semaine complète
-   de Vacances pour cet employé. */
-const VAC_CALENDAR_2026 = {
-  A: ['2026-02-15','2026-03-08','2026-08-09','2026-08-16','2026-12-20'],
-  B: ['2026-01-18','2026-06-07','2026-07-12','2026-07-19','2026-09-13'],
-  C: ['2026-08-23','2026-08-30','2026-09-20','2026-10-04','2026-11-01'],
-  D: ['2026-02-22','2026-06-21','2026-07-12','2026-07-19','2026-09-06','2026-09-20'],
-  F: ['2026-02-22','2026-05-24','2026-08-02','2026-08-30'],
-  G: ['2026-01-11','2026-06-14','2026-07-26','2026-08-02','2026-10-11','2026-10-18']
-};
+/* ============================================================
+   CALENDRIER DE VACANCES — IMPORT EXCEL (glisser-déposer)
+   Contrairement au PDF (image scannée, illisible automatiquement), un fichier Excel contient de
+   vraies données de cellules qu'on peut lire directement dans le navigateur (SheetJS/xlsx.js).
+============================================================ */
+let vacImportHistory = []; // {id, filename, importedAt, employeeWeeks:{code:[isoDate,...]}, summerWeeks:Set(isoDate), unmatchedNames:[...], applied}
+let importedVacKeys = {}; // id -> Set("code|date") des cases posées par CET import, pour pouvoir les retirer proprement
 
-function renderVacCalendarPreview(){
-  const el = document.getElementById('vacCalendarPreview');
-  let html = '';
-  Object.keys(VAC_CALENDAR_2026).forEach(code=>{
-    const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
-    const dates = VAC_CALENDAR_2026[code].map(d=>fmtDate(new Date(d+'T12:00:00'),{day:'2-digit',month:'2-digit'})).join(', ');
-    html += `<div><span class="letter-chip" style="width:20px;height:20px;font-size:10px;">${code}</span> <b style="color:var(--text);">${name}</b> — ${dates}</div>`;
-  });
-  el.innerHTML = html;
+function isoOfDate(d){ return ymd(d); }
+
+/* Convertit une date de fin de semaine (samedi, telle qu'affichée dans le calendrier — "semaine
+   finissant le") en date de DÉBUT de semaine (dimanche) pour matcher WEEKS[]. */
+function weekStartFromEndDate(endDate){
+  const d = new Date(endDate);
+  d.setDate(d.getDate() - 6);
+  return d;
 }
 
-document.getElementById('applyVacCalendarBtn').onclick = ()=>{
-  let count = 0;
-  Object.keys(VAC_CALENDAR_2026).forEach(code=>{
-    VAC_CALENDAR_2026[code].forEach(startStr=>{
-      const wIdx = WEEKS.findIndex(w=>ymd(w.start)===startStr);
+/* Essaie de convertir une valeur de cellule Excel (date réelle, texte "10/01/2026" ou numéro de
+   série Excel) en objet Date JS. Retourne null si non reconnaissable comme date. */
+function excelCellToDate(val){
+  if(val instanceof Date && !isNaN(val)) return val;
+  if(typeof val === 'number' && val > 20000 && val < 60000){
+    // numéro de série Excel (jours depuis 1899-12-30)
+    return new Date(Math.round((val - 25569) * 86400 * 1000));
+  }
+  if(typeof val === 'string'){
+    const m = val.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if(m){
+      let [_, a, b, y] = m;
+      if(y.length===2) y = '20'+y;
+      // format québécois courant JJ/MM/AAAA
+      const d = new Date(+y, +b-1, +a);
+      if(!isNaN(d)) return d;
+    }
+  }
+  return null;
+}
+
+function normalizeNameForMatch(s){
+  return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
+}
+
+/* Analyse le classeur Excel : trouve la ligne d'en-tête (dates de fin de semaine), les lignes
+   employés (par correspondance de nom de famille avec REAL_NAMES), la zone "période estivale"
+   (via le texte ÉTÉ/PRÉ-ÉTÉ d'une ligne d'en-tête, en tenant compte des cellules fusionnées), puis
+   construit la liste des semaines de vacances par employé (toute cellule non vide = une semaine). */
+function parseVacationWorkbook(workbook){
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const grid = [];
+  for(let r=range.s.r; r<=range.e.r; r++){
+    const row = [];
+    for(let c=range.s.c; c<=range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r,c})];
+      row.push(cell ? cell.v : null);
+    }
+    grid.push(row);
+  }
+
+  // Ligne d'en-tête = celle avec le plus de cellules reconnaissables comme dates
+  let headerRowIdx = -1, headerDateCount = -1;
+  const dateRowCache = [];
+  grid.forEach((row,ri)=>{
+    const dates = row.map(v=>excelCellToDate(v));
+    const count = dates.filter(d=>d).length;
+    dateRowCache.push(dates);
+    if(count > headerDateCount){ headerDateCount = count; headerRowIdx = ri; }
+  });
+  if(headerRowIdx<0 || headerDateCount<3){
+    return {error:"Impossible de trouver une ligne d'en-tête avec des dates de semaine dans ce fichier."};
+  }
+  const headerDates = dateRowCache[headerRowIdx];
+
+  // Zone "période estivale" : cherche ÉTÉ / PRÉ-ÉTÉ dans les 4 lignes au-dessus de l'en-tête,
+  // en tenant compte des plages fusionnées (!merges) pour étendre le texte à toutes ses colonnes.
+  const summerCols = new Set();
+  const merges = sheet['!merges'] || [];
+  for(let ri=Math.max(0,headerRowIdx-4); ri<headerRowIdx; ri++){
+    grid[ri].forEach((v,ci)=>{
+      const txt = normalizeNameForMatch(v);
+      if(txt.includes('ete') || txt.includes('preete')){
+        let colsForThis = [ci];
+        merges.forEach(m=>{
+          if(m.s.r<=ri && m.e.r>=ri && m.s.c<=ci && m.e.c>=ci){
+            colsForThis = [];
+            for(let c=m.s.c;c<=m.e.c;c++) colsForThis.push(c);
+          }
+        });
+        colsForThis.forEach(c=>summerCols.add(c));
+      }
+    });
+  }
+
+  // Lignes employés : cherche, sous l'en-tête, les lignes dont une des premières colonnes
+  // correspond (par nom de famille) à un des REAL_NAMES déjà configurés dans l'outil.
+  const employeeWeeks = {};
+  const summerWeeks = new Set();
+  const unmatchedNames = [];
+  const knownByLastName = {};
+  Object.keys(REAL_NAMES).forEach(code=>{
+    const last = normalizeNameForMatch(REAL_NAMES[code].split(',')[0]);
+    if(last) knownByLastName[last] = code;
+  });
+
+  for(let ri=headerRowIdx+1; ri<grid.length; ri++){
+    const row = grid[ri];
+    let matchedCode = null, rawName = null;
+    for(let ci=0; ci<Math.min(4,row.length); ci++){
+      const v = row[ci];
+      if(typeof v !== 'string' || v.trim().length<2) continue;
+      const norm = normalizeNameForMatch(v);
+      for(const last in knownByLastName){
+        if(norm.includes(last)){ matchedCode = knownByLastName[last]; rawName = v; break; }
+      }
+      if(matchedCode) break;
+      if(!rawName && /[a-zA-Z]{3,}/.test(v)) rawName = v; // garde le premier texte plausible comme nom brut
+    }
+    if(!matchedCode){
+      if(rawName) unmatchedNames.push(rawName.trim());
+      continue;
+    }
+    const weeks = [];
+    row.forEach((v,ci)=>{
+      if(ci>=headerDates.length || !headerDates[ci]) return;
+      if(v===null || v===undefined || v==='') return;
+      const weekStart = weekStartFromEndDate(headerDates[ci]);
+      const iso = isoOfDate(weekStart);
+      weeks.push(iso);
+      if(summerCols.has(ci)) summerWeeks.add(iso);
+    });
+    if(weeks.length) employeeWeeks[matchedCode] = weeks;
+  }
+
+  if(Object.keys(employeeWeeks).length===0){
+    return {error:"Aucun employé reconnu dans ce fichier — vérifiez que les noms correspondent à ceux configurés dans « Noms des employés »."};
+  }
+  return {employeeWeeks, summerWeeks, unmatchedNames};
+}
+
+function handleVacFile(file){
+  const status = document.getElementById('vacCalendarStatus');
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Analyse en cours…';
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type:'array', cellDates:true});
+      const result = parseVacationWorkbook(workbook);
+      if(result.error){
+        status.style.color = 'var(--alert)';
+        status.textContent = '✕ ' + result.error;
+        return;
+      }
+      const entry = {
+        id: 'vac'+Date.now(),
+        filename: file.name,
+        importedAt: new Date().toISOString(),
+        employeeWeeks: result.employeeWeeks,
+        summerWeeks: Array.from(result.summerWeeks),
+        unmatchedNames: [...new Set(result.unmatchedNames)],
+        applied: false
+      };
+      vacImportHistory.unshift(entry);
+      saveState();
+      status.style.color = 'var(--ok)';
+      status.textContent = `✓ Fichier analysé — ${Object.keys(entry.employeeWeeks).length} employé(s) reconnu(s)`;
+      renderVacCalendarPreview();
+    }catch(err){
+      status.style.color = 'var(--alert)';
+      status.textContent = '✕ Erreur de lecture du fichier — est-ce bien un .xlsx valide ?';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function applyVacEntry(entry){
+  const keys = new Set();
+  Object.keys(entry.employeeWeeks).forEach(code=>{
+    entry.employeeWeeks[code].forEach(startIso=>{
+      const wIdx = WEEKS.findIndex(w=>ymd(w.start)===startIso);
       if(wIdx<0) return;
-      const w = WEEKS[wIdx];
-      w.days.forEach((day,i)=>{
-        vacDays.set(code+'|'+ymd(day.date), 'vac');
+      WEEKS[wIdx].days.forEach(day=>{
+        const key = code+'|'+ymd(day.date);
+        vacDays.set(key, 'vac');
+        keys.add(key);
       });
-      count++;
     });
   });
+  importedVacKeys[entry.id] = keys;
+  entry.applied = true;
   simResult = null;
   saveState();
   refreshAll();
-  const status = document.getElementById('vacCalendarStatus');
-  status.textContent = `✓ ${count} semaines appliquées`;
-  setTimeout(()=>{ status.textContent=''; }, 4000);
+}
+
+function removeVacEntry(entry){
+  const keys = importedVacKeys[entry.id];
+  if(keys){
+    keys.forEach(key=>{
+      if(vacDays.get(key)==='vac') vacDays.delete(key);
+    });
+  }
+  delete importedVacKeys[entry.id];
+  entry.applied = false;
+  simResult = null;
+  saveState();
+  refreshAll();
+}
+
+function renderVacCalendarPreview(){
+  const previewEl = document.getElementById('vacCalendarPreview');
+  const applyBtn = document.getElementById('applyVacCalendarBtn');
+  const resetBtn = document.getElementById('resetVacCalendarBtn');
+  const historyEl = document.getElementById('vacImportHistory');
+
+  if(vacImportHistory.length===0){
+    previewEl.innerHTML = '';
+    applyBtn.style.display = 'none';
+    resetBtn.style.display = 'none';
+    historyEl.innerHTML = '';
+    return;
+  }
+
+  const latest = vacImportHistory[0];
+  let html = `<div style="margin-bottom:8px;color:var(--text-dim2);">Dernier fichier importé : <b style="color:var(--text);">${latest.filename}</b>${latest.summerWeeks.length?` — période estivale détectée : <b style="color:var(--text);">${latest.summerWeeks.length} semaine(s)</b>`:' — <span style="color:var(--alert);">aucune période estivale détectée (vérifiez l\'en-tête ÉTÉ du fichier)</span>'}</div>`;
+  Object.keys(latest.employeeWeeks).forEach(code=>{
+    const name = REAL_NAMES[code] ? REAL_NAMES[code].split(',')[0] : code;
+    const dates = latest.employeeWeeks[code].map(d=>fmtDate(new Date(d+'T12:00:00'),{day:'2-digit',month:'2-digit'})).join(', ');
+    html += `<div><span class="letter-chip" style="width:20px;height:20px;font-size:10px;">${code}</span> <b style="color:var(--text);">${name}</b> — ${dates}</div>`;
+  });
+  if(latest.unmatchedNames.length){
+    html += `<div style="margin-top:8px;color:var(--alert);">Non reconnus (ajoutez-les dans « Noms des employés » puis réimportez) : ${latest.unmatchedNames.join(', ')}</div>`;
+  }
+  previewEl.innerHTML = html;
+
+  applyBtn.style.display = 'inline-block';
+  applyBtn.textContent = latest.applied ? 'Retirer ce calendrier' : 'Appliquer le calendrier de vacances';
+  applyBtn.onclick = ()=>{
+    if(latest.applied) removeVacEntry(latest); else applyVacEntry(latest);
+    renderVacCalendarPreview();
+  };
+  resetBtn.style.display = 'inline-block';
+
+  // Historique des imports précédents
+  let hHtml = vacImportHistory.length>1 ? `<div style="font-size:11px;color:var(--text-dim2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">Historique des imports</div>` : '';
+  vacImportHistory.forEach(entry=>{
+    const d = new Date(entry.importedAt);
+    hHtml += `<div class="vac-history-item">
+      <span class="vh-date">${fmtDate(d,{day:'2-digit',month:'2-digit',year:'numeric'})}</span>
+      <span class="vh-name">${entry.filename} — ${Object.keys(entry.employeeWeeks).length} employé(s)</span>
+      <span class="vh-badge ${entry.applied?'active':'inactive'}">${entry.applied?'appliqué':'non appliqué'}</span>
+    </div>`;
+  });
+  historyEl.innerHTML = hHtml;
+}
+
+document.getElementById('resetVacCalendarBtn').onclick = ()=>{
+  if(!confirm("Attention : la cédule de vacances importée sera complètement détruite (toutes les semaines de vacances appliquées depuis un import seront retirées). Cette action est irréversible. Continuer ?")) return;
+  vacImportHistory.forEach(entry=>{
+    if(entry.applied) removeVacEntry(entry);
+  });
+  vacImportHistory = [];
+  importedVacKeys = {};
+  saveState();
+  renderVacCalendarPreview();
+};
+
+const vacDropZone = document.getElementById('vacDropZone');
+const vacFileInput = document.getElementById('vacFileInput');
+vacDropZone.onclick = ()=> vacFileInput.click();
+vacFileInput.onchange = ()=>{ if(vacFileInput.files[0]) handleVacFile(vacFileInput.files[0]); vacFileInput.value=''; };
+vacDropZone.ondragover = (e)=>{ e.preventDefault(); vacDropZone.classList.add('drag-over'); };
+vacDropZone.ondragleave = ()=>{ vacDropZone.classList.remove('drag-over'); };
+vacDropZone.ondrop = (e)=>{
+  e.preventDefault();
+  vacDropZone.classList.remove('drag-over');
+  if(e.dataTransfer.files[0]) handleVacFile(e.dataTransfer.files[0]);
 };
 
 /* Bascule un jour d'absence pour un employé (A-G) — jour précis, cliqué directement dans la
