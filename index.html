@@ -1363,8 +1363,11 @@ function vacType(code, dayIdx, w){
 
 /* ============================================================
    ÉCHANGES MANUELS ENTRE 2 EMPLOYÉS (même jour) — "les employés veulent parfois échanger des
-   relèves pour accommoder leur horaire". Aucune règle de la convention n'est appliquée (24h
-   consécutives, ancienneté, etc.) — échange brut du contenu de 2 cases, tel que demandé.
+   relèves pour accommoder leur horaire". Aucune règle de la convention n'est appliquée (ancienneté,
+   etc.) — échange brut du contenu de 2 cases, tel que demandé. SEULE exception : la règle des 12h
+   consécutives max (24h sans repos si on enchaîne nuit puis jour) reste vérifiée — voir
+   swapWouldViolate24h() plus bas — pour éviter qu'un échange crée involontairement ce genre
+   d'enchaînement dangereux.
    Activable seulement une fois qu'une simulation existe pour la semaine (simResult non nul) —
    après ce moment-là, le comblement/surtemps est déjà déterminé et l'échange n'est qu'une
    question de qui se présente physiquement. Persiste comme les vacances (par date réelle, donc
@@ -1402,9 +1405,45 @@ function removeSwap(codeA, codeB, dayIdx, w){
   if(pairs.length===0) manualSwaps.delete(iso); else manualSwaps.set(iso, pairs);
   return true;
 }
+/* Type de quart travaillé ('j'/'n') d'une cellule calculée, ou null si ce n'est pas un quart
+   travaillé (JO disponible, vacances/congé/maladie, hors horaire, etc.) — le suffixe " ot-flag"
+   éventuel (surtemps) est ignoré, seul le type de quart compte pour la règle des 24h. */
+function cellShiftType(cls){
+  const base = (cls || '').split(' ')[0];
+  if(base==='j') return 'j';
+  if(base==='n') return 'n';
+  return null;
+}
+/* Un échange est refusé s'il ferait travailler l'une des 2 personnes plus de 12h consécutives
+   sans repos — c'est-à-dire créerait un enchaînement quart de nuit puis quart de jour le
+   lendemain matin (aucun repos entre les deux), en tenant compte du quart RÉEL de la veille et du
+   lendemain (déjà affecté par un comblement/surtemps/échange précédent, pas seulement l'horaire
+   maître statique). Réutilise shiftsAdjacent(), la même définition que pour le surtemps. */
+function swapWouldViolate24h(codeX, codeY, dayIdx, w){
+  const week = w || WEEKS[weekIndex];
+  const cellX = computeCell(codeX, dayIdx); // AVANT échange
+  const cellY = computeCell(codeY, dayIdx);
+  const newShiftForX = cellShiftType(cellY.cls); // codeX recevrait l'ancien quart de codeY
+  const newShiftForY = cellShiftType(cellX.cls); // codeY recevrait l'ancien quart de codeX
+  function wouldViolate(code, newShift){
+    if(!newShift) return false; // pas un quart travaillé après échange : aucun risque de 24h
+    if(dayIdx>0){
+      const prevType = cellShiftType(computeCell(code, dayIdx-1).cls);
+      if(prevType && shiftsAdjacent(dayIdx-1, prevType, dayIdx, newShift)) return true;
+    }
+    if(dayIdx<6){
+      const nextType = cellShiftType(computeCell(code, dayIdx+1).cls);
+      if(nextType && shiftsAdjacent(dayIdx, newShift, dayIdx+1, nextType)) return true;
+    }
+    return false;
+  }
+  return wouldViolate(codeX, newShiftForX) || wouldViolate(codeY, newShiftForY);
+}
 /* Tente un échange entre codeX et codeY le même jour. Si c'est déjà la paire échangée en place,
    ça défait l'échange (annulation en re-sélectionnant les 2 mêmes cases, comme demandé). Si l'une
-   des 2 cases fait déjà partie d'un AUTRE échange ce jour-là, refusé — il faut d'abord l'annuler. */
+   des 2 cases fait déjà partie d'un AUTRE échange ce jour-là, refusé — il faut d'abord l'annuler.
+   Seule règle appliquée à l'échange (demandée explicitement) : jamais plus de 12h consécutives
+   sans repos pour l'une des 2 personnes (enchaînement nuit puis jour le lendemain matin). */
 function attemptSwap(codeX, codeY, dayIdx, w){
   const week = w || WEEKS[weekIndex];
   if(codeX === codeY) return {ok:false, msg:"On ne peut pas échanger une case avec elle-même."};
@@ -1416,6 +1455,9 @@ function attemptSwap(codeX, codeY, dayIdx, w){
   }
   if(partnerX || partnerY){
     return {ok:false, msg:"Une des deux cases fait déjà partie d'un échange ce jour-là — touche ses 2 cases échangées pour l'annuler d'abord."};
+  }
+  if(swapWouldViolate24h(codeX, codeY, dayIdx, week)){
+    return {ok:false, msg:"Échange refusé : ça créerait un enchaînement de plus de 12h consécutives sans repos (quart de nuit suivi d'un quart de jour le lendemain matin) pour l'une des 2 personnes."};
   }
   addSwap(codeX, codeY, dayIdx, week);
   return {ok:true, undone:false};
