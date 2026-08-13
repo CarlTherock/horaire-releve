@@ -687,9 +687,7 @@ footer a{color:var(--text-dim);}
       <button class="nav-btn" id="nextWeek">›</button>
     </div>
     <button class="today-btn" id="gotoNext">→ Semaine prochaine</button>
-    <div class="view-toggle">
-      <button id="filterWorkersBtn">👥 Relève seulement</button>
-    </div>
+
     <span class="summer-badge" id="summerBadge" style="display:none;">☀ Période estivale</span>
     <div class="freeze-status" id="freezeStatus" style="cursor:pointer;" title="Cliquer pour revenir à la semaine courante">
       <span class="dot"></span><span id="freezeText">—</span>
@@ -890,10 +888,14 @@ function displayName(code){
    ils restent masqués pour ne pas encombrer l'outil la plupart des semaines. Un nom n'est PAS un
    prérequis : la cascade de comblement (H→I→J) fonctionne même sans nom (affiché "À déterminer").
    Une absence marquée compte comme "activité" : ça reste visible pour qu'on sache pourquoi le
-   comblement est passé au suivant, sans jamais remettre l'horaire en doute. */
+   comblement est passé au suivant, sans jamais remettre l'horaire en doute.
+
+   Cette règle s'applique maintenant à TOUTE lettre (A-J), pas seulement H/I/J : la grille est
+   dynamique — une lettre disparaît d'elle-même la semaine où elle n'a strictement aucune activité
+   (aucun quart J/N, aucune vacance/congé/maladie, aucun JO disponible). Dès qu'elle a quelque
+   chose cette semaine-là, elle réapparaît automatiquement. Aucun bouton requis. */
 function activeEmployees(){
   return EMPLOYEES.filter(emp=>{
-    if(!['H','I','J'].includes(emp.code)) return true;
     for(let i=0;i<7;i++){
       if(computeCell(emp.code, i).cls !== 'off') return true;
     }
@@ -901,31 +903,12 @@ function activeEmployees(){
   });
 }
 /* Tous les employés, SANS exiger d'activité cette semaine-là — utilisé par le panneau de sélection
-   des vacances/absences, pour qu'on puisse justement cliquer "Vacances" sur H/I/J la première fois
-   (sinon ils n'apparaîtraient jamais dans ce panneau pour qu'on les y marque). H/I/J y figurent
-   toujours, même sans nom, pour ne jamais bloquer le fonctionnement de la cascade. */
+   des vacances/absences, pour qu'on puisse justement cliquer "Vacances" sur n'importe quelle lettre
+   (H/I/J en premier lieu) la première fois (sinon elle n'apparaîtrait jamais dans ce panneau pour
+   qu'on l'y marque). Toutes les lettres y figurent toujours, pour ne jamais bloquer le
+   fonctionnement de la cascade. */
 function namedEmployees(){
   return EMPLOYEES;
-}
-
-/* Un quart compte comme "travaillé" (relève réelle) s'il s'agit d'un quart J ou N — que ce soit
-   l'horaire maître normal, un comblement Jo, du surtemps (cls se termine par " ot-flag") ou du
-   renfort de jour formalisé (cls "eq", vue horaire réel publié). Les statuts "jo" (disponible,
-   non assigné), vacances/congé/maladie/férié et "off" ne comptent pas. */
-function isWorkingCls(cls){
-  const base = (cls || '').split(' ')[0];
-  return base==='j' || base==='n' || base==='eq';
-}
-/* Employés ayant réellement au moins un quart travaillé (J/N, incl. surtemps et renfort de jour)
-   cette semaine — utilisé par le bouton "Relève seulement" pour masquer tous les employés qui ne
-   font aucune des 14 relèves de la semaine. */
-function workingEmployeesThisWeek(){
-  return activeEmployees().filter(emp=>{
-    for(let i=0;i<7;i++){
-      if(isWorkingCls(computeCell(emp.code, i).cls)) return true;
-    }
-    return false;
-  });
 }
 
 /* Ordre d'ancienneté de métier (du plus ancien au plus jeune) — utilisé pour l'offre de surtemps.
@@ -1217,7 +1200,6 @@ let unavailableJo = new Set();
    sélection de vacances/absences (reset avec la simulation). */
 let otConfirmations = {};
 let simResult = null;
-let filterWorkersOnly = false; // true = grille filtrée aux employés ayant un quart J/N (incl. surtemps/renfort) cette semaine
 let currentDayIdx = 0;
 
 /* ============================================================
@@ -1234,7 +1216,7 @@ function saveState(){
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       weekStart: ymd(WEEKS[weekIndex].start),
-      showReal, filterWorkersOnly, currentDayIdx, seniorityOrder,
+      showReal, currentDayIdx, seniorityOrder,
       vacDays: Array.from(vacDays.entries()),
       unavailableJo: Array.from(unavailableJo),
       otConfirmations: otConfSerializable,
@@ -1254,7 +1236,6 @@ function loadState(){
       if(idx>=0) weekIndex = idx;
     }
     if(typeof s.showReal==='boolean') showReal = s.showReal;
-    if(typeof s.filterWorkersOnly==='boolean') filterWorkersOnly = s.filterWorkersOnly;
     if(Number.isInteger(s.currentDayIdx) && s.currentDayIdx>=0 && s.currentDayIdx<=6) currentDayIdx = s.currentDayIdx;
     if(s.realNames && typeof s.realNames==='object'){
       REAL_NAMES = s.realNames;
@@ -1484,7 +1465,7 @@ function buildScheduleHTML(w, isReal){
     return `<th class="${we}">${DAY_LABELS[i]}<span class="daynum">${fmtDate(d.date,{day:'2-digit',month:'2-digit'})}</span></th>`;
   }).join('');
 
-  const emps = filterWorkersOnly ? workingEmployeesThisWeek() : activeEmployees();
+  const emps = activeEmployees();
 
   let bodyHTML = '';
   emps.forEach(emp=>{
@@ -1500,8 +1481,8 @@ function buildScheduleHTML(w, isReal){
     });
     bodyHTML += `<tr>${cells}</tr>`;
   });
-  if(emps.length===0 && filterWorkersOnly){
-    bodyHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim2);padding:20px;">Aucun quart travaillé cette semaine-là (personne en relève).</td></tr>`;
+  if(emps.length===0){
+    bodyHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim2);padding:20px;">Aucune activité cette semaine-là.</td></tr>`;
   }
   return {headHTML, bodyHTML};
 }
@@ -2560,27 +2541,6 @@ document.getElementById('print4WeeksBtn').onclick = ()=>{
   printWeeks(indices);
 };
 
-/* Bouton "Relève seulement" : filtre la grille (même format, mêmes colonnes) pour ne garder que
-   les employés ayant au moins un des 14 quarts J/N travaillés cette semaine — comblement normal,
-   surtemps confirmé, ou renfort de jour (EQ RELEVE) inclus. Les employés sans quart travaillé
-   cette semaine-là (vacances, congé, JO non utilisé, etc.) disparaissent de la grille. */
-function updateFilterBtn(){
-  const btn = document.getElementById('filterWorkersBtn');
-  if(filterWorkersOnly){
-    btn.classList.add('active');
-    btn.textContent = '👥 Relève seulement (activé)';
-  }else{
-    btn.classList.remove('active');
-    btn.textContent = '👥 Relève seulement';
-  }
-}
-document.getElementById('filterWorkersBtn').onclick = ()=>{
-  filterWorkersOnly = !filterWorkersOnly;
-  updateFilterBtn();
-  renderTable();
-  saveState();
-};
-
 /* Retourne à la semaine courante (celle contenant aujourd'hui) — utilisé au démarrage et quand on
    clique sur le badge "Horaire gelé — publié" en haut de la page. */
 function goToCurrentWeek(){
@@ -2603,7 +2563,6 @@ refreshAll();
 renderSeniorityList();
 renderNamesEditor();
 renderVacCalendarPreview();
-updateFilterBtn();
 if(vacatingCodesThisWeek(WEEKS[weekIndex]).length>0) runSimulation();/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
    (icône sur l'écran d'accueil, plein écran, fonctionne même hors-ligne une fois visité). */
 if('serviceWorker' in navigator){
