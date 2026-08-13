@@ -689,10 +689,10 @@ footer a{color:var(--text-dim);}
     <button class="today-btn" id="gotoNext">→ Semaine prochaine</button>
     <div class="view-toggle">
       <button id="viewGridBtn" class="active">Grille</button>
-      <button id="viewDayBtn">Jour</button>
+      <button id="viewRosterBtn">14 relèves</button>
     </div>
     <span class="summer-badge" id="summerBadge" style="display:none;">☀ Période estivale</span>
-    <div class="freeze-status" id="freezeStatus">
+    <div class="freeze-status" id="freezeStatus" style="cursor:pointer;" title="Cliquer pour revenir à la semaine courante">
       <span class="dot"></span><span id="freezeText">—</span>
     </div>
   </div>
@@ -743,14 +743,12 @@ footer a{color:var(--text-dim);}
     </div>
   </div>
 
-  <!-- ===== HORAIRE PRINCIPAL — VUE JOUR (mobile) ===== -->
-  <div class="panel day-view" id="dayPanel">
-    <div class="day-nav">
-      <button class="nav-btn" id="prevDay">‹</button>
-      <div class="day-title" id="dayTitle">—<span class="sub" id="daySub">—</span></div>
-      <button class="nav-btn" id="nextDay">›</button>
+  <!-- ===== HORAIRE PRINCIPAL — VUE 14 RELÈVES (compact, par quart) ===== -->
+  <div class="panel" id="rosterPanel" style="display:none;">
+    <div class="panel-head">
+      <h2>14 relèves de la semaine — <b>qui travaille, par quart</b></h2>
     </div>
-    <div class="day-cards" id="dayCards"></div>
+    <div id="rosterBody" style="padding:14px 18px 18px;"></div>
   </div>
 
   <!-- ===== SIMULATEUR DE COMBLEMENT ===== -->
@@ -1078,9 +1076,16 @@ const WEEKS = RAW_WEEKS.map(([start,J,N])=>{
   return { start: startDate, J, N, days };
 });
 
-let weekIndex = WEEKS.findIndex(w => ymd(w.start) === "2026-08-09");
-if(weekIndex < 0) weekIndex = 0;
-let showReal = (ymd(WEEKS[weekIndex].start) === "2026-08-09");
+let weekIndex = (()=>{
+  const today = new Date(); today.setHours(0,0,0,0);
+  let idx = WEEKS.findIndex(w=>{
+    const end = addDays(w.start,6); end.setHours(23,59,59,999);
+    return today >= w.start && today <= end;
+  });
+  if(idx<0) idx = WEEKS.findIndex(w=>w.start >= today);
+  return idx<0 ? 0 : idx;
+})();
+let showReal = (ymd(WEEKS[weekIndex].start) === REAL_WEEK_START);
 
 /* Simulation state */
 let vacDays = new Map(); // clé "code|YYYY-MM-DD" -> "conge" | "vac" (vacances officielle, art. 22)
@@ -1201,7 +1206,7 @@ let unavailableJo = new Set();
    sélection de vacances/absences (reset avec la simulation). */
 let otConfirmations = {};
 let simResult = null;
-let viewMode = 'grid'; // 'grid' | 'day'
+let viewMode = 'grid'; // 'grid' | 'roster'
 let currentDayIdx = 0;
 
 /* ============================================================
@@ -1238,7 +1243,7 @@ function loadState(){
       if(idx>=0) weekIndex = idx;
     }
     if(typeof s.showReal==='boolean') showReal = s.showReal;
-    if(s.viewMode==='grid' || s.viewMode==='day') viewMode = s.viewMode;
+    if(s.viewMode==='grid' || s.viewMode==='roster') viewMode = s.viewMode;
     if(Number.isInteger(s.currentDayIdx) && s.currentDayIdx>=0 && s.currentDayIdx<=6) currentDayIdx = s.currentDayIdx;
     if(s.realNames && typeof s.realNames==='object'){
       REAL_NAMES = s.realNames;
@@ -1500,6 +1505,7 @@ function renderTable(){
 }
 
 function renderDayView(){
+  if(!document.getElementById('dayTitle')) return; // vue Jour retirée — pas d'erreur si encore appelée ailleurs
   const w = WEEKS[weekIndex];
   const isReal = showReal && ymd(w.start)===REAL_WEEK_START;
   const day = w.days[currentDayIdx];
@@ -2541,41 +2547,90 @@ document.getElementById('print4WeeksBtn').onclick = ()=>{
 document.getElementById('viewGridBtn').onclick = ()=>{
   viewMode='grid';
   document.getElementById('viewGridBtn').classList.add('active');
-  document.getElementById('viewDayBtn').classList.remove('active');
+  document.getElementById('viewRosterBtn').classList.remove('active');
   document.getElementById('gridPanel').style.display='';
-  document.getElementById('dayPanel').classList.remove('active');
+  document.getElementById('rosterPanel').style.display='none';
   saveState();
 };
-document.getElementById('viewDayBtn').onclick = ()=>{
-  viewMode='day';
-  document.getElementById('viewDayBtn').classList.add('active');
+document.getElementById('viewRosterBtn').onclick = ()=>{
+  viewMode='roster';
+  document.getElementById('viewRosterBtn').classList.add('active');
   document.getElementById('viewGridBtn').classList.remove('active');
   document.getElementById('gridPanel').style.display='none';
-  document.getElementById('dayPanel').classList.add('active');
-  renderDayView();
+  document.getElementById('rosterPanel').style.display='';
+  renderShiftRoster();
   saveState();
 };
-document.getElementById('prevDay').onclick = ()=>{
-  currentDayIdx = (currentDayIdx+6)%7;
-  renderDayView();
-  saveState();
-};
-document.getElementById('nextDay').onclick = ()=>{
-  currentDayIdx = (currentDayIdx+1)%7;
-  renderDayView();
-  saveState();
-};
+
+/* Vue "14 relèves" : la même grille (colonnes par jour) que la vue normale, mais filtrée pour ne
+   garder que les employés qui travaillent réellement (J/N) au moins un des 14 quarts de la semaine
+   — comblement normal, surtemps confirmé, ou renfort de jour (EQ RELEVE) inclus. Tous les employés
+   sans quart travaillé cette semaine-là (vacances, congé, JO non utilisé, etc.) disparaissent. */
+function renderShiftRoster(){
+  const w = WEEKS[weekIndex];
+  const isReal = showReal && ymd(w.start)===REAL_WEEK_START;
+  const workingCodes = new Set(['j','n','reg']);
+  const workers = activeEmployees().filter(emp=>{
+    for(let i=0;i<7;i++){
+      if(workingCodes.has(computeCell(emp.code, i).cls)) return true;
+    }
+    return false;
+  });
+
+  const headHTML = '<th class="emp-col">Employé</th>' + w.days.map((d,i)=>{
+    const we = (i===0||i===6) ? ' weekend-col' : '';
+    return `<th class="${we}">${DAY_LABELS[i]}<span class="daynum">${fmtDate(d.date,{day:'2-digit',month:'2-digit'})}</span></th>`;
+  }).join('');
+
+  let bodyHTML = '';
+  workers.forEach(emp=>{
+    let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${displayName(emp.code)}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
+    w.days.forEach((day,i)=>{
+      const c = computeCell(emp.code, i);
+      const t = truncTag(c.tag, 15);
+      const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
+      const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
+      cells += `<td class="shift-cell"><span class="shift ${c.cls}">${badgeHtml}${c.hours}${tagHtml}</span></td>`;
+    });
+    bodyHTML += `<tr>${cells}</tr>`;
+  });
+  if(workers.length===0){
+    bodyHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim2);padding:20px;">Aucun quart travaillé cette semaine-là (personne en relève).</td></tr>`;
+  }
+
+  document.getElementById('rosterBody').innerHTML =
+    `<table class="schedule" style="width:100%;"><thead><tr>${headHTML}</tr></thead><tbody>${bodyHTML}</tbody></table>`;
+}
+
+/* Retourne à la semaine courante (celle contenant aujourd'hui) — utilisé au démarrage et quand on
+   clique sur le badge "Horaire gelé — publié" en haut de la page. */
+function goToCurrentWeek(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  let idx = WEEKS.findIndex(w=>{
+    const end = addDays(w.start,6); end.setHours(23,59,59,999);
+    return today >= w.start && today <= end;
+  });
+  if(idx<0) idx = WEEKS.findIndex(w=>w.start >= today);
+  if(idx<0) idx = 0;
+  weekIndex = idx;
+  showReal = (ymd(WEEKS[weekIndex].start) === REAL_WEEK_START);
+  simResult = null;
+  currentDayIdx = 0;
+  refreshAll();
+  if(viewMode==='roster') renderShiftRoster();
+}
+document.getElementById('freezeStatus').onclick = goToCurrentWeek;
 
 refreshAll();
 renderSeniorityList();
 renderNamesEditor();
 renderVacCalendarPreview();
-if(viewMode==='day'){
-  document.getElementById('viewDayBtn').classList.add('active');
+if(viewMode==='roster'){
+  document.getElementById('viewRosterBtn').classList.add('active');
   document.getElementById('viewGridBtn').classList.remove('active');
   document.getElementById('gridPanel').style.display='none';
-  document.getElementById('dayPanel').classList.add('active');
-  renderDayView();
+  document.getElementById('rosterPanel').style.display='';
+  renderShiftRoster();
 }
 if(vacatingCodesThisWeek(WEEKS[weekIndex]).length>0) runSimulation();/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
    (icône sur l'écran d'accueil, plein écran, fonctionne même hors-ligne une fois visité). */
