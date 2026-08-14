@@ -648,6 +648,66 @@ tr:hover td.emp-col{background:#1a222d;}
 .summary-table th{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim2);text-align:center;}
 .summary-table td:first-child, .summary-table th:first-child{text-align:left;padding-left:18px;}
 
+/* ===== TABLEAU DE BORD ANNUEL ===== */
+.dash-year-select{
+  font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel-2);
+  border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;cursor:pointer;
+}
+.dash-kpi-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+.dash-kpi{
+  flex:1;min-width:160px;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;
+  padding:16px 18px;position:relative;overflow:hidden;
+}
+.dash-kpi::before{
+  content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--accent-color,var(--jour));
+}
+.dash-kpi .num{font-family:'Oswald',sans-serif;font-size:32px;font-weight:600;color:var(--text);line-height:1;}
+.dash-kpi .lbl{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;margin-top:6px;}
+.dash-view-toggle{display:flex;gap:8px;margin-bottom:16px;}
+.dash-view-btn{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);
+  padding:8px 14px;border-radius:8px;cursor:pointer;transition:.15s;
+}
+.dash-view-btn.active{background:var(--jour-dim);border-color:var(--jour);color:var(--jour);}
+.dash-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.dash-table th,.dash-table td{padding:10px 12px;border-bottom:1px solid var(--line);}
+.dash-table th{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--text-dim2);text-align:left;cursor:pointer;user-select:none;white-space:nowrap;
+}
+.dash-table th:hover{color:var(--text);}
+.dash-table th.sorted::after{content:' ▾';color:var(--jour);}
+.dash-table th.sorted.asc::after{content:' ▴';}
+.dash-table td:first-child{font-weight:600;}
+.dash-emp-cell{display:flex;align-items:center;gap:8px;}
+.dash-bar-cell{position:relative;min-width:140px;}
+.dash-bar-track{position:relative;height:20px;background:var(--panel-3);border-radius:5px;overflow:hidden;}
+.dash-bar-fill{
+  position:absolute;top:0;left:0;height:100%;border-radius:5px;
+  transition:width .6s cubic-bezier(.22,.8,.3,1);display:flex;align-items:center;justify-content:flex-end;
+  padding-right:6px;box-sizing:border-box;
+}
+.dash-bar-fill span{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;color:#0e131a;white-space:nowrap;}
+.dash-bar-fill.zero span{color:var(--text-dim2);padding-right:0;}
+.dash-chart-wrap{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px;}
+.dash-metric-select{
+  font-family:'JetBrains Mono',monospace;font-size:11.5px;background:var(--panel-3);
+  border:1px solid var(--line);color:var(--text);border-radius:7px;padding:6px 10px;cursor:pointer;margin-bottom:16px;
+}
+.dash-chart-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.dash-chart-label{width:140px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);flex:none;}
+.dash-chart-track{flex:1;height:26px;background:var(--panel-3);border-radius:6px;overflow:hidden;position:relative;}
+.dash-chart-fill{height:100%;border-radius:6px;transition:width .7s cubic-bezier(.22,.8,.3,1);display:flex;align-items:center;padding-left:8px;box-sizing:border-box;}
+.dash-chart-fill span{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#0e131a;}
+.dash-loading{text-align:center;padding:40px 20px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:13px;}
+.dash-spinner{
+  width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--jour);border-radius:50%;
+  margin:0 auto 14px;animation:dash-spin .8s linear infinite;
+}
+@keyframes dash-spin{to{transform:rotate(360deg);}}
+.dash-caveat{font-size:11px;color:var(--text-dim2);margin-top:14px;line-height:1.6;}
+
 .seniority-row{
   display:flex;align-items:center;gap:10px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:8px;padding:8px 10px;
@@ -989,6 +1049,20 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
         <input type="file" id="importConfigInput" accept="application/json,.json" style="display:none;">
         <span id="backupStatus" style="font-size:12px;color:var(--ok);"></span>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== TABLEAU DE BORD ANNUEL ===== -->
+  <div class="panel dash-panel">
+    <div class="panel-head">
+      <h2>📊 Tableau de bord annuel</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <select id="dashYear" class="dash-year-select"></select>
+        <button class="print-btn" id="dashGenerate">⚡ Générer le tableau de bord</button>
+      </div>
+    </div>
+    <div id="dashBody">
+      <div class="placeholder">Choisis une année et clique « Générer » — congés/maladies/vacances sont lus directement (fiables à 100%) ; remplacements et surtemps sont recalculés semaine par semaine avec le vrai moteur de comblement (peut prendre quelques secondes, et ne reflète que les semaines où une vacance a été entrée dans l'outil).</div>
     </div>
   </div>
 
@@ -3429,6 +3503,215 @@ function goToCurrentWeek(){
   currentDayIdx = 0;
   refreshAll();
 }
+
+/* ============================================================
+   TABLEAU DE BORD ANNUEL
+   Congés/maladies/vacances : lus directement dans vacDays (fiable à 100%, indépendant de toute
+   simulation). Remplacements/surtemps : recalculés en relançant le VRAI moteur de comblement
+   (runSimulation) pour chaque semaine de l'année qui a au moins une vacance entrée — on ne
+   duplique jamais la logique de comblement ailleurs, pour ne jamais diverger du comportement réel
+   de l'outil. Ne compte que les affectations CONFIRMÉES (coveredBy non nul) — un surtemps encore
+   "en attente de confirmation" n'est jamais attribué à quelqu'un dans les statistiques.
+   L'état réel de l'app (semaine affichée, simResult) est sauvegardé puis restauré après coup —
+   le calcul est invisible pour l'utilisateur une fois terminé. */
+function populateDashYearSelect(){
+  const sel = document.getElementById('dashYear');
+  const years = Array.from(new Set(WEEKS.map(w=>w.start.getFullYear()))).sort((a,b)=>a-b);
+  const currentYear = new Date().getFullYear();
+  sel.innerHTML = years.map(y=>`<option value="${y}"${y===currentYear?' selected':''}>${y}</option>`).join('');
+}
+
+function computeYearStats(year){
+  const stats = {};
+  EMPLOYEES.forEach(e=>{ stats[e.code] = {conge:0, maladie:0, vac:0, remplacements:0, surtemps:0, nonResolu:0}; });
+
+  const yearWeeks = WEEKS.filter(w=>w.start.getFullYear()===year);
+
+  // 1) Congés / maladies / vacances — direct depuis vacDays, aucune simulation requise.
+  yearWeeks.forEach(w=>{
+    w.days.forEach(day=>{
+      EMPLOYEES.forEach(e=>{
+        const t = vacDays.get(e.code+'|'+ymd(day.date));
+        if(t==='conge') stats[e.code].conge++;
+        else if(t==='maladie') stats[e.code].maladie++;
+        else if(t==='vac') stats[e.code].vac++;
+      });
+    });
+  });
+
+  // 2) Remplacements / surtemps — relance le vrai moteur pour chaque semaine concernée.
+  const savedWeekIndex = weekIndex;
+  const savedSimResult = simResult;
+  const savedShowReal = showReal;
+  yearWeeks.forEach(w=>{
+    const globalIdx = WEEKS.indexOf(w);
+    if(globalIdx < 0) return;
+    weekIndex = globalIdx;
+    showReal = false; // toujours calculer sur l'horaire théorique, jamais la semaine réelle figée
+    if(vacatingCodesThisWeek(w).length === 0) return;
+    runSimulation();
+    if(simResult){
+      simResult.forEach(a=>{
+        if(!a.coveredBy){ if(stats[a.who]) stats[a.who].nonResolu++; return; }
+        if(!stats[a.coveredBy]) return;
+        stats[a.coveredBy].remplacements++;
+        if(a.result.type==='ot') stats[a.coveredBy].surtemps++;
+      });
+    }
+  });
+  weekIndex = savedWeekIndex;
+  simResult = savedSimResult;
+  showReal = savedShowReal;
+  refreshAll(); // restaure l'affichage normal de la semaine d'origine
+
+  return stats;
+}
+
+let dashCurrentStats = null;
+let dashCurrentYear = null;
+let dashSortKey = 'remplacements';
+let dashSortAsc = false;
+let dashView = 'table'; // 'table' | 'chart'
+let dashChartMetric = 'remplacements';
+
+const DASH_METRICS = [
+  {key:'conge', label:'Congés', color:'#9abf91'},
+  {key:'maladie', label:'Maladie', color:'#d878a0'},
+  {key:'vac', label:'Vacances', color:'#39e678'},
+  {key:'remplacements', label:'Remplacements', color:'#5b93cc'},
+  {key:'surtemps', label:'Surtemps', color:'#e2a13d'},
+  {key:'nonResolu', label:'Non résolu', color:'#e0645f'},
+];
+
+function runDashGenerate(){
+  const year = parseInt(document.getElementById('dashYear').value, 10);
+  const body = document.getElementById('dashBody');
+  body.innerHTML = `<div class="dash-loading"><div class="dash-spinner"></div>Calcul de l'année ${year} en cours — recalcul de chaque semaine avec le moteur de comblement…</div>`;
+  setTimeout(()=>{
+    dashCurrentStats = computeYearStats(year);
+    dashCurrentYear = year;
+    renderDashboard();
+  }, 30); // laisse le temps au spinner de s'afficher avant le calcul (synchrone, potentiellement long)
+}
+
+function dashTotal(stats, key){
+  return EMPLOYEES.reduce((sum,e)=>sum + stats[e.code][key], 0);
+}
+
+function renderDashboard(){
+  const stats = dashCurrentStats;
+  const year = dashCurrentYear;
+  const body = document.getElementById('dashBody');
+  if(!stats){ return; }
+
+  const totalConge = dashTotal(stats,'conge');
+  const totalMaladie = dashTotal(stats,'maladie');
+  const totalVac = dashTotal(stats,'vac');
+  const totalRemp = dashTotal(stats,'remplacements');
+  const totalOt = dashTotal(stats,'surtemps');
+  const totalGap = dashTotal(stats,'nonResolu');
+
+  let html = `<div class="dash-kpi-row">
+    <div class="dash-kpi" style="--accent-color:#9abf91;"><div class="num">${totalConge}</div><div class="lbl">Jours de congé (${year})</div></div>
+    <div class="dash-kpi" style="--accent-color:#d878a0;"><div class="num">${totalMaladie}</div><div class="lbl">Jours de maladie</div></div>
+    <div class="dash-kpi" style="--accent-color:#39e678;"><div class="num">${totalVac}</div><div class="lbl">Jours de vacances</div></div>
+    <div class="dash-kpi" style="--accent-color:#5b93cc;"><div class="num">${totalRemp}</div><div class="lbl">Remplacements effectués</div></div>
+    <div class="dash-kpi" style="--accent-color:#e2a13d;"><div class="num">${totalOt}</div><div class="lbl">Quarts en surtemps</div></div>
+    <div class="dash-kpi" style="--accent-color:#e0645f;"><div class="num">${totalGap}</div><div class="lbl">Quarts non résolus</div></div>
+  </div>`;
+
+  html += `<div class="dash-view-toggle">
+    <button class="dash-view-btn${dashView==='table'?' active':''}" data-dashview="table">📋 Tableau</button>
+    <button class="dash-view-btn${dashView==='chart'?' active':''}" data-dashview="chart">📈 Graphique</button>
+  </div>`;
+
+  if(dashView==='table'){
+    html += buildDashTableHTML(stats);
+  } else {
+    html += buildDashChartHTML(stats);
+  }
+
+  html += `<p class="dash-caveat">Congés/maladies/vacances reflètent exactement ce qui a été entré dans l'outil. Remplacements et surtemps ne couvrent que les semaines où une vacance a été simulée cette année — une semaine jamais ouverte dans l'outil n'apparaît pas ici. "Non résolu" = quart resté sans volontaire ni renfort de jour (liste d'appel du secteur).</p>`;
+
+  body.innerHTML = html;
+  wireDashInteractions();
+  requestAnimationFrame(()=>{
+    body.querySelectorAll('.dash-bar-fill, .dash-chart-fill').forEach(el=>{
+      const w = el.dataset.targetWidth;
+      if(w!==undefined) el.style.width = w + '%';
+    });
+  });
+}
+
+function buildDashTableHTML(stats){
+  const rows = EMPLOYEES.map(e=>({code:e.code, name:displayName(e.code), role:e.role, ...stats[e.code]}));
+  rows.sort((a,b)=>{
+    const diff = (a[dashSortKey] - b[dashSortKey]) * (dashSortAsc ? 1 : -1);
+    return diff !== 0 ? diff : a.code.localeCompare(b.code);
+  });
+  const maxes = {};
+  DASH_METRICS.forEach(m=> maxes[m.key] = Math.max(1, ...rows.map(r=>r[m.key])));
+
+  const cols = [
+    {key:'conge', label:'Congés'}, {key:'maladie', label:'Maladie'}, {key:'vac', label:'Vacances'},
+    {key:'remplacements', label:'Remplacements'}, {key:'surtemps', label:'Surtemps'}, {key:'nonResolu', label:'Non résolu'}
+  ];
+  let html = `<table class="dash-table"><thead><tr>
+    <th data-sortkey="code">Employé</th>
+    ${cols.map(c=>`<th data-sortkey="${c.key}" class="${dashSortKey===c.key?'sorted'+(dashSortAsc?' asc':''):''}">${c.label}</th>`).join('')}
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    html += `<tr><td><div class="dash-emp-cell"><span class="letter-chip">${r.code}</span>${r.name}</div></td>`;
+    DASH_METRICS.filter(m=>cols.some(c=>c.key===m.key)).forEach(m=>{
+      const val = r[m.key];
+      const pct = Math.round((val / maxes[m.key]) * 100);
+      html += `<td class="dash-bar-cell"><div class="dash-bar-track"><div class="dash-bar-fill${val===0?' zero':''}" data-target-width="${val===0?0:pct}" style="width:0%;background:${m.color};"><span>${val}</span></div></div></td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+
+function buildDashChartHTML(stats){
+  const metric = DASH_METRICS.find(m=>m.key===dashChartMetric);
+  const rows = EMPLOYEES.map(e=>({code:e.code, name:displayName(e.code), val:stats[e.code][dashChartMetric]}));
+  rows.sort((a,b)=> b.val - a.val);
+  const max = Math.max(1, ...rows.map(r=>r.val));
+  let html = `<div class="dash-chart-wrap">
+    <select class="dash-metric-select" id="dashMetricSelect">
+      ${DASH_METRICS.map(m=>`<option value="${m.key}"${m.key===dashChartMetric?' selected':''}>${m.label}</option>`).join('')}
+    </select>`;
+  rows.forEach(r=>{
+    const pct = Math.round((r.val / max) * 100);
+    html += `<div class="dash-chart-row">
+      <div class="dash-chart-label">${r.code} — ${r.name.split(',')[0]}</div>
+      <div class="dash-chart-track"><div class="dash-chart-fill" data-target-width="${r.val===0?0:pct}" style="width:0%;background:${metric.color};">${r.val>0?`<span>${r.val}</span>`:''}</div></div>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+
+function wireDashInteractions(){
+  document.querySelectorAll('[data-dashview]').forEach(btn=>{
+    btn.onclick = ()=>{ dashView = btn.dataset.dashview; renderDashboard(); };
+  });
+  document.querySelectorAll('.dash-table th[data-sortkey]').forEach(th=>{
+    th.onclick = ()=>{
+      const key = th.dataset.sortkey;
+      if(key==='code') return;
+      if(dashSortKey===key) dashSortAsc = !dashSortAsc;
+      else { dashSortKey = key; dashSortAsc = false; }
+      renderDashboard();
+    };
+  });
+  const metricSel = document.getElementById('dashMetricSelect');
+  if(metricSel) metricSel.onchange = ()=>{ dashChartMetric = metricSel.value; renderDashboard(); };
+}
+
+populateDashYearSelect();
+document.getElementById('dashGenerate').onclick = runDashGenerate;
 
 refreshAll();
 renderSeniorityList();
