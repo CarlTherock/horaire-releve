@@ -516,6 +516,13 @@ tr:hover td.emp-col{background:#1a222d;}
   background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim);
   padding:2px 8px;border-radius:12px;margin-bottom:10px;
 }
+.swap-summary{margin:2px 0 12px;}
+.swap-summary-line{
+  color:var(--nuit);font-size:12.5px;line-height:1.6;
+  background:rgba(91,147,204,0.08);border:1px solid rgba(91,147,204,0.25);
+  border-radius:7px;padding:6px 10px;margin-bottom:5px;
+}
+.swap-summary-line b{color:var(--nuit);}
 .sim-stats{
   display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap;
 }
@@ -1393,24 +1400,29 @@ let manualSwaps = [];
 function lookupSwap(code, iso){
   for(const s of manualSwaps){
     const sameDay = (s.isoA === s.isoB);
+    const isRequester = (code === s.requesterCode);
     if(s.codeA===code){
-      if(sameDay && s.isoA===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB};
-      if(!sameDay && s.isoA===iso) return {role:'origin', partnerCode:s.codeB, partnerIso:s.isoB};
-      if(!sameDay && s.isoB===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB};
+      if(sameDay && s.isoA===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB, isRequester};
+      if(!sameDay && s.isoA===iso) return {role:'origin', partnerCode:s.codeB, partnerIso:s.isoB, isRequester};
+      if(!sameDay && s.isoB===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB, isRequester};
     }
     if(s.codeB===code){
-      if(sameDay && s.isoB===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA};
-      if(!sameDay && s.isoB===iso) return {role:'origin', partnerCode:s.codeA, partnerIso:s.isoA};
-      if(!sameDay && s.isoA===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA};
+      if(sameDay && s.isoB===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA, isRequester};
+      if(!sameDay && s.isoB===iso) return {role:'origin', partnerCode:s.codeA, partnerIso:s.isoA, isRequester};
+      if(!sameDay && s.isoA===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA, isRequester};
     }
   }
   return null;
 }
+/* codeA (= codeX dans attemptSwap) est TOUJOURS la case "prise en premier" — celle glissée
+   (dragstart), donc la personne qui a demandé l'échange. On le garde explicite (requesterCode)
+   plutôt que de se fier implicitement à l'ordre codeA/codeB, pour que ce soit robuste et clair
+   partout où on affiche "qui a demandé" l'échange (panneau "Absent(s) cette semaine", info-bulles). */
 function addSwap(codeA, dayIdxA, codeB, dayIdxB, w){
   const week = w || WEEKS[weekIndex];
   const isoA = ymd(week.days[dayIdxA].date);
   const isoB = ymd(week.days[dayIdxB].date);
-  manualSwaps.push({codeA, isoA, codeB, isoB});
+  manualSwaps.push({codeA, isoA, codeB, isoB, requesterCode: codeA});
 }
 function removeSwapAt(code, dayIdx, w){
   const week = w || WEEKS[weekIndex];
@@ -1422,6 +1434,15 @@ function removeSwapAt(code, dayIdx, w){
   if(idx<0) return false;
   manualSwaps.splice(idx,1);
   return true;
+}
+/* Échanges actifs dont au moins un des 2 jours tombe dans la semaine "w" — utilisé par le panneau
+   "Absent(s) cette semaine" pour lister les échanges en cours (en bleu). Comme un échange ne peut
+   être créé qu'entre 2 cases de la MÊME semaine affichée, isoA et isoB sont toujours dans la même
+   semaine : vérifier isoA suffit, mais on vérifie les deux par robustesse. */
+function getActiveSwapsForWeek(w){
+  const week = w || WEEKS[weekIndex];
+  const weekIsos = new Set(week.days.map(d=>ymd(d.date)));
+  return manualSwaps.filter(s => weekIsos.has(s.isoA) || weekIsos.has(s.isoB));
 }
 /* Type de quart travaillé ('j'/'n') d'une cellule calculée, ou null si ce n'est pas un quart
    travaillé (JO disponible, vacances/congé/maladie, hors horaire, etc.) — le suffixe " ot-flag"
@@ -1786,14 +1807,14 @@ function computeCell(empCode, dayIdx){
         return {
           cls:'off', hours:'—', tag:'', badge:null,
           swapped:true, swapEmptied:true, swapPartner:info.partnerCode,
-          swapPartnerDayIdx: partnerDayIdx
+          swapPartnerDayIdx: partnerDayIdx, swapIsRequester: info.isRequester
         };
       }
       // destination : le partenaire avait SON contenu à ce même jour (dayIdx) — on le reprend tel quel.
       const base = computeCellBase(info.partnerCode, dayIdx);
       return {
         ...base, swapped:true, swapPartner:info.partnerCode,
-        swapPartnerDayIdx: partnerDayIdx
+        swapPartnerDayIdx: partnerDayIdx, swapIsRequester: info.isRequester
       };
     }
   }
@@ -1935,9 +1956,10 @@ function buildScheduleHTML(w, isReal, interactive){
       const t = truncTag(c.tag, 15);
       const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
       const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
+      const requesterTag = c.swapIsRequester ? ' (demandeur de l\'échange)' : '';
       const swapTooltip = c.swapEmptied
-        ? `Quart cédé à ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]}) — toucher pour annuler l'échange`
-        : `Quart déplacé ici suite à l'échange avec ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]}) — toucher pour annuler l'échange`;
+        ? `Quart cédé à ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher pour annuler l'échange`
+        : `Quart déplacé ici suite à l'échange avec ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher pour annuler l'échange`;
       const swapDotHtml = c.swapped ? `<span class="swap-dot" data-swap-remove="1" title="${swapTooltip}">🔄</span>` : '';
       cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${badgeHtml}${swapDotHtml}${c.hours}${tagHtml}</span></td>`;
     });
@@ -2880,6 +2902,21 @@ function renderResultBox(assignments, vac, specialRuleCount, stats, sickReservis
     ruleTag = 'Art. 8.01 f)6 — ordre des remplaçants, débutant par la lettre E';
   }
   let html = `<span class="rule-tag">${ruleTag}</span><h3>Absent(s) cette semaine : ${vac.join(', ')}</h3>`;
+  const swapsThisWeek = getActiveSwapsForWeek(WEEKS[weekIndex]);
+  if(swapsThisWeek.length){
+    const w = WEEKS[weekIndex];
+    html += `<div class="swap-summary">` + swapsThisWeek.map(s=>{
+      const dayA = w.days.findIndex(d=>ymd(d.date)===s.isoA);
+      const dayB = w.days.findIndex(d=>ymd(d.date)===s.isoB);
+      const requesterIsA = (s.requesterCode === s.codeA);
+      const requesterName = displayName(s.requesterCode);
+      const otherCode = requesterIsA ? s.codeB : s.codeA;
+      const otherName = displayName(otherCode);
+      const requesterDay = DAY_LABELS[requesterIsA ? dayA : dayB];
+      const otherDay = DAY_LABELS[requesterIsA ? dayB : dayA];
+      return `<div class="swap-summary-line">🔄 <b>${requesterName}</b> (${requesterDay}) a demandé l'échange avec <b>${otherName}</b> (${otherDay})</div>`;
+    }).join('') + `</div>`;
+  }
   html += `<div class="sim-stats">
     <div class="sim-stat"><span class="sim-stat-num">${stats.totalReplacements}</span><span class="sim-stat-label">Remplacements à faire</span></div>
     <div class="sim-stat"><span class="sim-stat-num">${stats.totalJoAvailable}</span><span class="sim-stat-label">JO disponibles (E·F·G)</span></div>
