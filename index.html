@@ -3167,15 +3167,9 @@ document.getElementById('nextWeek').onclick = ()=>{
   refreshAll();
 };
 document.getElementById('gotoNext').onclick = ()=>{
-  const today = new Date(); today.setHours(0,0,0,0);
-  let idx = WEEKS.findIndex(w=>{
-    const thu = addDays(w.start,-3);
-    return today < thu || (today>=w.start && today<=addDays(w.start,6));
-  });
-  if(idx<0) idx = WEEKS.findIndex(w=> w.start > today);
-  weekIndex = idx>=0 ? idx : weekIndex;
+  weekIndex = Math.min(WEEKS.length-1, weekIndex+1);
   simResult=null;
-  currentDayIdx = todayDayIdxInWeek();
+  currentDayIdx = 0;
   refreshAll();
 };
 document.getElementById('runSim').onclick = runSimulation;
