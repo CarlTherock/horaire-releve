@@ -1384,21 +1384,24 @@ function vacType(code, dayIdx, w){
 ============================================================ */
 let manualSwaps = [];
 /* Cherche si (code, iso) est impliqué dans un échange actif, et retourne son rôle :
-   - 'origin' : ce jour-là était le jour d'origine de "code" — il l'a cédé au partenaire, case vide
-     désormais.
-   - 'destination' : "code" travaille maintenant ce jour-là (celui du partenaire) — et prend
-     ENTIÈREMENT la place du partenaire : le contenu affiché est celui que LE PARTENAIRE avait à ce
-     même jour (pas le contenu propre de "code"). Un échange, c'est prendre toute la place de
-     l'autre — jour ET quart — pas juste déplacer son propre quart sur un autre jour. */
+   - même jour pour les 2 personnes (isoA === isoB, cas le plus courant — échanger qui fait le
+     quart d'un même jour) : PAS de case vide, simple échange de contenu à ce jour précis — les 2
+     personnes gardent leur propre jour, seul le contenu affiché change ("destination" directement).
+   - jours différents : "origin" = le jour d'origine cédé, case vide ; "destination" = le jour pris
+     au partenaire, affiche le contenu que LE PARTENAIRE y avait (prendre toute la place de
+     l'autre — jour ET quart — pas juste déplacer son propre quart). */
 function lookupSwap(code, iso){
   for(const s of manualSwaps){
+    const sameDay = (s.isoA === s.isoB);
     if(s.codeA===code){
-      if(s.isoA===iso) return {role:'origin', partnerCode:s.codeB, partnerIso:s.isoB};
-      if(s.isoB===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB};
+      if(sameDay && s.isoA===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB};
+      if(!sameDay && s.isoA===iso) return {role:'origin', partnerCode:s.codeB, partnerIso:s.isoB};
+      if(!sameDay && s.isoB===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB};
     }
     if(s.codeB===code){
-      if(s.isoB===iso) return {role:'origin', partnerCode:s.codeA, partnerIso:s.isoA};
-      if(s.isoA===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA};
+      if(sameDay && s.isoB===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA};
+      if(!sameDay && s.isoB===iso) return {role:'origin', partnerCode:s.codeA, partnerIso:s.isoA};
+      if(!sameDay && s.isoA===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA};
     }
   }
   return null;
@@ -1467,8 +1470,13 @@ function swapWouldViolate24h(codeX, dayIdxX, codeY, dayIdxY, w){
    (annulation en re-sélectionnant les 2 mêmes cases). Si l'une des 2 cases fait déjà partie d'un
    AUTRE échange, refusé — il faut d'abord l'annuler.
    Règles appliquées (demandées explicitement, tout le reste — ancienneté, etc. — est ignoré) :
-   (1) jamais plus de 12h consécutives sans repos pour l'une des 2 personnes, et (2) une relève de
-   surtemps ne peut jamais être échangée. */
+   (1) jamais plus de 12h consécutives sans repos pour l'une des 2 personnes, (2) une relève de
+   surtemps ne peut jamais être échangée, et (3) si les 2 jours sont différents, chaque personne
+   doit être libre (hors horaire) à SON jour d'arrivée — sinon l'échange écraserait silencieusement
+   un quart/surtemps/vacances qu'elle avait déjà ce jour-là (ex. Desrochers a déjà du surtemps le
+   vendredi : impossible de le faire "arriver" ce jour-là via un échange, ça effacerait son
+   surtemps sans avertissement). Cette règle ne s'applique pas aux échanges même jour (2 personnes
+   qui échangent qui fait le quart d'un même jour ne "libèrent" ni n'"occupent" aucun jour). */
 function attemptSwap(codeX, dayIdxX, codeY, dayIdxY, w){
   const week = w || WEEKS[weekIndex];
   if(codeX === codeY) return {ok:false, msg:"On ne peut échanger qu'entre 2 employés différents."};
@@ -1488,6 +1496,13 @@ function attemptSwap(codeX, dayIdxX, codeY, dayIdxY, w){
   const cellYraw = computeCell(codeY, dayIdxY);
   if(isOvertimeCls(cellXraw.cls) || isOvertimeCls(cellYraw.cls)){
     return {ok:false, msg:"Échange refusé : une relève de surtemps (⚡) ne peut pas être échangée."};
+  }
+  if(dayIdxX !== dayIdxY){
+    const destForXOwn = computeCellBase(codeX, dayIdxY); // ce que codeX a DÉJÀ, de son côté, au jour d'arrivée
+    const destForYOwn = computeCellBase(codeY, dayIdxX);
+    if(destForXOwn.cls !== 'off' || destForYOwn.cls !== 'off'){
+      return {ok:false, msg:"Échange refusé : l'un des 2 employés a déjà quelque chose ce jour-là (quart, surtemps, vacances, JO...) qui serait écrasé sans avertissement."};
+    }
   }
   if(swapWouldViolate24h(codeX, dayIdxX, codeY, dayIdxY, week)){
     return {ok:false, msg:"Échange refusé : ça créerait un enchaînement de plus de 12h consécutives sans repos (quart de nuit suivi d'un quart de jour le lendemain matin) pour l'une des 2 personnes."};
