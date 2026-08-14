@@ -426,7 +426,13 @@ tr:hover td.emp-col{background:#1a222d;}
 .chip-toggle.jo-toggle.active-maladie{background:rgba(216,120,160,0.18);border-color:#d878a0;color:#e6a0c4;border-style:solid;}
 .chip-toggle.jo-toggle.active-vac{background:rgba(57,230,120,0.16);border-color:#39e678;color:#4bffa0;border-style:solid;}
 .chip-toggle.jo-toggle.chip-borrowed{box-shadow:0 0 0 1px rgba(224,161,61,0.35) inset;}
-.chip-toggle.jo-toggle.chip-borrowed::after{content:'⚡';font-size:9px;margin-left:3px;opacity:.8;}
+.chip-jn-badge{
+  display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+  border-radius:50%;font-size:9px;font-weight:700;margin-left:4px;border:1px solid #0e131a;
+  font-family:'JetBrains Mono',monospace;vertical-align:middle;
+}
+.chip-jn-badge.jn-j{background:var(--jour);color:#241804;}
+.chip-jn-badge.jn-n{background:var(--nuit);color:#04121f;}
 
 .vac-row{
   display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);
@@ -2640,14 +2646,17 @@ function renderChips(){
       // d'autre HORS de son horaire JO habituel (ex. Lapierre appelé un lundi qui n'est
       // normalement pas son jour JO) — sinon impossible de demander congé/maladie sur ce
       // quart de remplacement pourtant bien réel cette semaine-là.
-      const isComblementDay = simResult && simResult.some(a=>a.coveredBy===code && a.dayIdx===i);
+      const comblementAssignment = simResult && simResult.find(a=>a.coveredBy===code && a.dayIdx===i);
+      const isComblementDay = !!comblementAssignment;
       if(!isMasterJoDay && !isComblementDay) return; // ni jour JO habituel, ni comblement : rien à basculer
       const vt = vacType(code, i, w); // null | 'conge' | 'maladie' | 'vac'
       const chip = document.createElement('div');
-      chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '') + (isComblementDay && !isMasterJoDay ? ' chip-borrowed' : '');
-      chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}`;
+      const borrowed = isComblementDay && !isMasterJoDay;
+      chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '') + (borrowed ? ' chip-borrowed' : '');
+      const jnBadge = borrowed ? `<span class="chip-jn-badge jn-${comblementAssignment.shift}">${comblementAssignment.shift.toUpperCase()}</span>` : '';
+      chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}${jnBadge}`;
       chip.title = (vt ? `Cliquer pour retirer (${vt})` : 'Cliquer : disponible → Congé → Maladie')
-        + (isComblementDay && !isMasterJoDay ? ' — quart de remplacement hors horaire habituel' : '');
+        + (borrowed ? ' — quart de remplacement hors horaire habituel' : '');
       chip.onclick = ()=> toggleVacDay(code, i, w);
       jChips.appendChild(chip);
     });
@@ -2656,12 +2665,13 @@ function renderChips(){
   // RELEVE cette semaine-là (pas d'horaire fixe sinon, rien à basculer).
   ['H','I','J'].forEach(code=>{
     w.days.forEach((day,i)=>{
-      const hasAssignment = simResult && simResult.some(a=>a.coveredBy===code && a.dayIdx===i);
-      if(!hasAssignment) return;
+      const assignment = simResult && simResult.find(a=>a.coveredBy===code && a.dayIdx===i);
+      if(!assignment) return;
       const vt = vacType(code, i, w);
       const chip = document.createElement('div');
       chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '') + ' chip-borrowed';
-      chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}`;
+      const jnBadge = `<span class="chip-jn-badge jn-${assignment.shift}">${assignment.shift.toUpperCase()}</span>`;
+      chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}${jnBadge}`;
       chip.title = (vt ? `Cliquer pour retirer (${vt})` : 'Cliquer : disponible → Congé → Maladie') + ' — renfort de jour';
       chip.onclick = ()=> toggleVacDay(code, i, w);
       jChips.appendChild(chip);
