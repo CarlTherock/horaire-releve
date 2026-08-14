@@ -1364,11 +1364,13 @@ function vacType(code, dayIdx, w){
 /* ============================================================
    ÉCHANGES MANUELS ENTRE 2 EMPLOYÉS DIFFÉRENTS — N'IMPORTE OÙ DANS LA GRILLE DE LA SEMAINE
    "les employés veulent parfois échanger des relèves pour accommoder leur horaire" — ex. Desrochers
-   glisse SON jeudi sur le samedi de Roy : Desrochers se retrouve à travailler samedi (avec SON
-   propre quart, déplacé) et son jeudi original devient vide (il l'a cédé) ; Roy, de son côté, se
-   retrouve à travailler jeudi (avec SON propre quart, déplacé) et son samedi original devient vide.
-   Chaque quart RESTE celui de sa personne d'origine — un échange déplace le jour de travail de
-   chacun vers le jour de l'autre, ce n'est PAS un échange de contenu entre 2 cases fixes.
+   glisse SON lundi sur le dimanche de Lapierre : Desrochers se retrouve à travailler dimanche, avec
+   le quart que LAPIERRE y avait (pas le sien) ; son lundi original devient vide (cédé). Lapierre, de
+   son côté, se retrouve à travailler lundi, avec le quart que DESROCHERS y avait ; son dimanche
+   original devient vide.
+   Un échange, c'est prendre ENTIÈREMENT la place de l'autre — jour ET quart — pas juste déplacer
+   son propre quart sur un autre jour, et pas non plus un simple échange de contenu entre 2 cases
+   fixes en gardant chacun son jour d'origine.
    Aucune règle de la convention n'est appliquée (ancienneté, etc.) — tel que demandé. SEULES
    exceptions : (1) la règle des 12h consécutives max (24h sans repos si on enchaîne nuit puis jour
    le lendemain matin) reste vérifiée, et (2) une relève de surtemps ne peut jamais être échangée.
@@ -1376,24 +1378,27 @@ function vacType(code, dayIdx, w){
    Persiste comme les vacances (par date réelle, donc ça fonctionne même sur une semaine déjà
    gelée/publiée).
    Structure : liste d'échanges actifs {codeA, isoA, codeB, isoB} — isoA est le jour d'ORIGINE de
-   codeA (maintenant vide pour lui, et où codeB apparaît désormais), isoB est le jour d'origine de
-   codeB (maintenant vide pour lui, et où codeA apparaît désormais).
+   codeA (maintenant vide pour lui, et où codeB apparaît désormais avec le contenu que codeA y
+   avait), isoB est le jour d'origine de codeB (maintenant vide pour lui, et où codeA apparaît
+   désormais avec le contenu que codeB y avait).
 ============================================================ */
 let manualSwaps = [];
 /* Cherche si (code, iso) est impliqué dans un échange actif, et retourne son rôle :
-   - 'origin' : ce jour-là était le jour d'origine de "code" — son quart est parti ailleurs, case
-     vide désormais.
-   - 'destination' : "code" travaille maintenant ce jour-là — case vide à l'origine, occupée par le
-     quart de "code" déplacé depuis son propre jour d'origine (ownOtherIso). */
+   - 'origin' : ce jour-là était le jour d'origine de "code" — il l'a cédé au partenaire, case vide
+     désormais.
+   - 'destination' : "code" travaille maintenant ce jour-là (celui du partenaire) — et prend
+     ENTIÈREMENT la place du partenaire : le contenu affiché est celui que LE PARTENAIRE avait à ce
+     même jour (pas le contenu propre de "code"). Un échange, c'est prendre toute la place de
+     l'autre — jour ET quart — pas juste déplacer son propre quart sur un autre jour. */
 function lookupSwap(code, iso){
   for(const s of manualSwaps){
     if(s.codeA===code){
-      if(s.isoA===iso) return {role:'origin', ownOtherIso:s.isoB, partnerCode:s.codeB, partnerIso:s.isoB};
-      if(s.isoB===iso) return {role:'destination', ownOtherIso:s.isoA, partnerCode:s.codeB, partnerIso:s.isoB};
+      if(s.isoA===iso) return {role:'origin', partnerCode:s.codeB, partnerIso:s.isoB};
+      if(s.isoB===iso) return {role:'destination', partnerCode:s.codeB, partnerIso:s.isoB};
     }
     if(s.codeB===code){
-      if(s.isoB===iso) return {role:'origin', ownOtherIso:s.isoA, partnerCode:s.codeA, partnerIso:s.isoA};
-      if(s.isoA===iso) return {role:'destination', ownOtherIso:s.isoB, partnerCode:s.codeA, partnerIso:s.isoA};
+      if(s.isoB===iso) return {role:'origin', partnerCode:s.codeA, partnerIso:s.isoA};
+      if(s.isoA===iso) return {role:'destination', partnerCode:s.codeA, partnerIso:s.isoA};
     }
   }
   return null;
@@ -1432,17 +1437,17 @@ function isOvertimeCls(cls){
   return (cls || '').split(' ').includes('ot-flag');
 }
 /* Un échange est refusé s'il ferait travailler l'une des 2 personnes plus de 12h consécutives sans
-   repos. Après l'échange, codeX travaille désormais à dayIdxY (avec SON propre contenu d'origine,
-   celui qu'il avait à dayIdxX) et codeY travaille désormais à dayIdxX (avec SON propre contenu
-   d'origine, celui qu'il avait à dayIdxY) — on vérifie donc l'adjacence autour du NOUVEAU jour de
-   travail de chacun, en ignorant l'ancien jour (dayToIgnore) puisqu'il devient vide (aucun risque
-   de fatigue depuis une case désormais vide). Réutilise shiftsAdjacent(), comme pour le surtemps. */
+   repos. Après l'échange, codeX prend ENTIÈREMENT la place de codeY à dayIdxY (avec le contenu que
+   codeY y avait) et codeY prend la place de codeX à dayIdxX (avec le contenu que codeX y avait) —
+   on vérifie donc l'adjacence autour du NOUVEAU jour de travail de chacun, en ignorant l'ancien
+   jour (dayToIgnore) puisqu'il devient vide (aucun risque de fatigue depuis une case désormais
+   vide). Réutilise shiftsAdjacent(), comme pour le surtemps. */
 function swapWouldViolate24h(codeX, dayIdxX, codeY, dayIdxY, w){
   const week = w || WEEKS[weekIndex];
-  const cellXOwn = computeCellBase(codeX, dayIdxX); // contenu propre de X, avant échange
-  const cellYOwn = computeCellBase(codeY, dayIdxY); // contenu propre de Y, avant échange
-  const newShiftForXAtY = cellShiftType(cellXOwn.cls); // X aura CE contenu, désormais affiché à dayIdxY
-  const newShiftForYAtX = cellShiftType(cellYOwn.cls); // Y aura CE contenu, désormais affiché à dayIdxX
+  const cellYOwn = computeCellBase(codeY, dayIdxY); // contenu de Y à dayIdxY, avant échange
+  const cellXOwn = computeCellBase(codeX, dayIdxX); // contenu de X à dayIdxX, avant échange
+  const newShiftForXAtY = cellShiftType(cellYOwn.cls); // X aura CE contenu (celui de Y), désormais à dayIdxY
+  const newShiftForYAtX = cellShiftType(cellXOwn.cls); // Y aura CE contenu (celui de X), désormais à dayIdxX
   function wouldViolate(code, newDayIdx, newShift, dayToIgnore){
     if(!newShift) return false;
     if(newDayIdx>0 && (newDayIdx-1)!==dayToIgnore){
@@ -1746,12 +1751,12 @@ const REAL_WEEK_KNOWN_CODES = new Set(
 );
 
 /* Enveloppe de computeCellBase qui applique un échange manuel s'il y en a un pour cet employé ce
-   jour-là. Un échange DÉPLACE le jour de travail de chacun vers le jour de l'autre (le quart reste
-   celui de sa personne d'origine) :
-   - rôle "origin" (le jour d'origine, cédé) → case vide (l'employé ne travaille plus ce jour-là).
-   - rôle "destination" (le jour pris à l'autre) → affiche le contenu PROPRE de cet employé, celui
-     qu'il avait à son propre jour d'origine (jamais re-redirigé vers le partenaire, on appelle
-     toujours computeCellBase pour éviter toute récursion).
+   jour-là. Un échange, c'est prendre ENTIÈREMENT la place de l'autre — jour ET quart :
+   - rôle "origin" (le jour d'origine, cédé) → case vide (l'employé ne travaille plus ce jour-là,
+     il l'a cédé au partenaire).
+   - rôle "destination" (le jour pris au partenaire) → affiche le contenu que LE PARTENAIRE avait
+     à ce même jour (jamais re-redirigé une 2e fois, on appelle toujours computeCellBase pour le
+     partenaire afin d'éviter toute récursion) — pas le contenu propre de cet employé.
    Désactivé sur la semaine réelle publiée (isReal) — référence de validation figée, non éditable,
    comme le reste des interactions de la grille. */
 function computeCell(empCode, dayIdx){
@@ -1761,22 +1766,20 @@ function computeCell(empCode, dayIdx){
     const iso = ymd(w.days[dayIdx].date);
     const info = lookupSwap(empCode, iso);
     if(info){
+      const partnerDayIdx = w.days.findIndex(d => ymd(d.date) === info.partnerIso);
       if(info.role === 'origin'){
         return {
           cls:'off', hours:'—', tag:'', badge:null,
           swapped:true, swapEmptied:true, swapPartner:info.partnerCode,
-          swapPartnerDayIdx: w.days.findIndex(d => ymd(d.date) === info.partnerIso)
+          swapPartnerDayIdx: partnerDayIdx
         };
       }
-      const ownDayIdx = w.days.findIndex(d => ymd(d.date) === info.ownOtherIso);
-      if(ownDayIdx >= 0){
-        const base = computeCellBase(empCode, ownDayIdx);
-        return {
-          ...base, swapped:true, swapPartner:info.partnerCode,
-          swapPartnerDayIdx: w.days.findIndex(d => ymd(d.date) === info.partnerIso),
-          swapFromDayIdx: ownDayIdx
-        };
-      }
+      // destination : le partenaire avait SON contenu à ce même jour (dayIdx) — on le reprend tel quel.
+      const base = computeCellBase(info.partnerCode, dayIdx);
+      return {
+        ...base, swapped:true, swapPartner:info.partnerCode,
+        swapPartnerDayIdx: partnerDayIdx
+      };
     }
   }
   return computeCellBase(empCode, dayIdx);
