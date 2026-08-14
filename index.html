@@ -3842,6 +3842,10 @@ function renderDashboard(){
 
 function buildDashTableHTML(rows){
   rows = rows.slice().sort((a,b)=>{
+    if(dashSortKey==='code'){
+      const diff = a.code.localeCompare(b.code) * (dashSortAsc ? 1 : -1);
+      return diff !== 0 ? diff : a.name.localeCompare(b.name);
+    }
     const diff = (a[dashSortKey] - b[dashSortKey]) * (dashSortAsc ? 1 : -1);
     return diff !== 0 ? diff : a.code.localeCompare(b.code);
   });
@@ -3855,7 +3859,7 @@ function buildDashTableHTML(rows){
     {key:'nonResolu', label:'Non résolu'}
   ];
   let html = `<table class="dash-table"><thead><tr>
-    <th data-sortkey="code">${dashGrouping==='person'?'Lettre — personne':'Employé'}</th>
+    <th data-sortkey="code" class="${dashSortKey==='code'?'sorted'+(dashSortAsc?' asc':''):''}">${dashGrouping==='person'?'Lettre — personne':'Employé'}</th>
     ${cols.map(c=>`<th data-sortkey="${c.key}" class="${dashSortKey===c.key?'sorted'+(dashSortAsc?' asc':''):''}">${c.label}</th>`).join('')}
   </tr></thead><tbody>`;
   rows.forEach(r=>{
@@ -3900,9 +3904,8 @@ function wireDashInteractions(){
   document.querySelectorAll('.dash-table th[data-sortkey]').forEach(th=>{
     th.onclick = ()=>{
       const key = th.dataset.sortkey;
-      if(key==='code') return;
       if(dashSortKey===key) dashSortAsc = !dashSortAsc;
-      else { dashSortKey = key; dashSortAsc = false; }
+      else { dashSortKey = key; dashSortAsc = (key==='code'); } // "Employé" trie A→J par défaut au 1er clic
       renderDashboard();
     };
   });
