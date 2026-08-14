@@ -2031,11 +2031,13 @@ function buildScheduleHTML(w, isReal, interactive){
     const clickable = !isReal;
     w.days.forEach((day,i)=>{
       const c = computeCell(emp.code, i);
-      // En mode "Relève seulement", un JO disponible (non assigné) n'est pas un vrai quart
-      // travaillé — on ne veut voir que J/N réels dans cette vue filtrée, donc on l'affiche
-      // comme une case vide plutôt que "JO disponible".
+      // En mode "Relève seulement", on ne veut voir que les vrais quarts J/N travaillés — les
+      // statuts JO disponible, vacances, congé et maladie ne sont pas des quarts travaillés,
+      // donc on les affiche comme une case vide dans cette vue filtrée (ils restent visibles
+      // normalement dans la grille complète et dans le panneau de vacances).
       const cBaseCls = (c.cls || '').split(' ')[0];
-      const dc = (filterWorkersOnly && cBaseCls === 'jo') ? {cls:'off', hours:'—', tag:'', badge:null} : c;
+      const maskedCls = ['jo','vac','conge','maladie'];
+      const dc = (filterWorkersOnly && maskedCls.includes(cBaseCls)) ? {cls:'off', hours:'—', tag:'', badge:null} : c;
       // H/I/J n'ont pas d'horaire fixe — congé/maladie n'a de sens sur leur case que s'ils ont
       // réellement une affectation de renfort de jour (EQ RELEVE) cette semaine-là ; sinon la case
       // est vide et il n'y a rien à demander en congé dessus.
