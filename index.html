@@ -263,6 +263,8 @@ header{
   padding:8px 12px;border-radius:8px;cursor:pointer;transition:.15s;text-transform:uppercase;
 }
 .today-btn:hover{color:var(--text);border-color:#3a4a5e;}
+.today-btn-secondary{background:rgba(91,147,204,0.08);border-color:rgba(91,147,204,0.3);color:var(--nuit);}
+.today-btn-secondary:hover{background:rgba(91,147,204,0.16);border-color:var(--nuit);color:var(--nuit);}
 
 .freeze-status{
   margin-left:auto;display:flex;align-items:center;gap:9px;
@@ -846,7 +848,10 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
       </div>
       <button class="nav-btn" id="nextWeek">›</button>
     </div>
-    <button class="today-btn" id="gotoNext">→ Semaine prochaine</button>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <button class="today-btn" id="gotoNext">→ Semaine prochaine</button>
+      <button class="today-btn today-btn-secondary" id="gotoCurrent">📍 Semaine courante</button>
+    </div>
     <div class="view-toggle">
       <button id="filterWorkersBtn">👥 Relève seulement</button>
     </div>
@@ -3166,12 +3171,27 @@ document.getElementById('nextWeek').onclick = ()=>{
   simResult=null; currentDayIdx=0;
   refreshAll();
 };
+/* Trouve l'index de la semaine qui contient la date du jour (aujourd'hui), peu importe la
+   semaine actuellement affichée à l'écran — utilisé par "Semaine prochaine" (aujourd'hui + 1) et
+   "Semaine courante" (aujourd'hui), pour que ces 2 raccourcis pointent toujours au même endroit
+   fixe, plutôt que de se déplacer relativement à ce qui est affiché. */
+function todayWeekIndex(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  let idx = WEEKS.findIndex(w=>{
+    const end = addDays(w.start,6); end.setHours(23,59,59,999);
+    return today >= w.start && today <= end;
+  });
+  if(idx<0) idx = WEEKS.findIndex(w=>w.start >= today);
+  if(idx<0) idx = 0;
+  return idx;
+}
 document.getElementById('gotoNext').onclick = ()=>{
-  weekIndex = Math.min(WEEKS.length-1, weekIndex+1);
+  weekIndex = Math.min(WEEKS.length-1, todayWeekIndex()+1);
   simResult=null;
   currentDayIdx = 0;
   refreshAll();
 };
+document.getElementById('gotoCurrent').onclick = goToCurrentWeek;
 document.getElementById('runSim').onclick = runSimulation;
 document.getElementById('resetWeekSim').onclick = ()=>{
   const w = WEEKS[weekIndex];
@@ -3397,8 +3417,8 @@ document.getElementById('filterWorkersBtn').onclick = ()=>{
   saveState();
 };
 
-/* Retourne à la semaine courante (celle contenant aujourd'hui) — utilisé au démarrage et quand on
-   clique sur le badge "Horaire gelé — publié" en haut de la page. */
+/* Retourne à la semaine courante (celle contenant aujourd'hui) — utilisé au démarrage et par le
+   bouton "📍 Semaine courante". */
 function goToCurrentWeek(){
   const today = new Date(); today.setHours(0,0,0,0);
   let idx = WEEKS.findIndex(w=>{
