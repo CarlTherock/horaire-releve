@@ -851,7 +851,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
       <button id="filterWorkersBtn">👥 Relève seulement</button>
     </div>
     <span class="summer-badge" id="summerBadge" style="display:none;">☀ Période estivale</span>
-    <div class="freeze-status" id="freezeStatus" style="cursor:pointer;" title="Cliquer pour revenir à la semaine courante">
+    <div class="freeze-status" id="freezeStatus" title="Gel de la semaine affichée à l'écran">
       <span class="dot"></span><span id="freezeText">—</span>
     </div>
   </div>
@@ -3413,7 +3413,6 @@ function goToCurrentWeek(){
   currentDayIdx = 0;
   refreshAll();
 }
-document.getElementById('freezeStatus').onclick = goToCurrentWeek;
 
 refreshAll();
 renderSeniorityList();
