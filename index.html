@@ -1958,10 +1958,12 @@ function buildScheduleHTML(w, isReal, interactive){
       const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
       const requesterTag = c.swapIsRequester ? ' (demandeur de l\'échange)' : '';
       const swapTooltip = c.swapEmptied
-        ? `Quart cédé à ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher pour annuler l'échange`
+        ? `Quart cédé à ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher la case déplacée pour annuler l'échange`
         : `Quart déplacé ici suite à l'échange avec ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher pour annuler l'échange`;
-      const swapDotHtml = c.swapped ? `<span class="swap-dot" data-swap-remove="1" title="${swapTooltip}">🔄</span>` : '';
-      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${badgeHtml}${swapDotHtml}${c.hours}${tagHtml}</span></td>`;
+      // Le rond d'annulation n'apparaît que sur la case qui affiche le quart déplacé (destination) —
+      // pas sur la case vide d'origine, qui n'a rien à "annuler" visuellement dessus.
+      const swapDotHtml = (c.swapped && !c.swapEmptied) ? `<span class="swap-dot" data-swap-remove="1" title="${swapTooltip}">🔄</span>` : '';
+      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}${c.swapEmptied?` title="${swapTooltip}"`:''}><span class="shift ${c.cls}">${badgeHtml}${swapDotHtml}${c.hours}${tagHtml}</span></td>`;
     });
     bodyHTML += `<tr>${cells}</tr>`;
   });
@@ -2020,7 +2022,7 @@ function attachSwapHandlers(w, isReal){
       const td = dot.closest('.shift-cell');
       const code = td.dataset.code, dayIdx = parseInt(td.dataset.day,10);
       if(removeSwapAt(code, dayIdx, w)){
-        saveState(); renderTable(); renderChips(); renderSummary();
+        saveState(); runSimulation(); renderSummary();
         showSwapStatus('Échange annulé.', false);
       }
     });
@@ -2054,7 +2056,7 @@ function attachSwapHandlers(w, isReal){
       dragSwapSource = null;
       if(!res.ok) showSwapStatus(res.msg, true);
       else{
-        saveState(); renderTable(); renderChips(); renderSummary();
+        saveState(); runSimulation(); renderSummary();
         showSwapStatus(res.undone ? 'Échange annulé.' : 'Échange effectué.', false);
       }
     });
