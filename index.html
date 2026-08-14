@@ -992,15 +992,6 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
     </div>
   </div>
 
-  <!-- ===== RÉSUMÉ ===== -->
-  <div class="panel">
-    <div class="panel-head"><h2>Résumé de la semaine</h2></div>
-    <table class="summary-table">
-      <thead><tr><th>Employé</th><th>Quarts J</th><th>Quarts N</th><th>Total 12h</th><th>Fin de semaine</th><th>Statut horaire</th></tr></thead>
-      <tbody id="summaryBody"></tbody>
-    </table>
-  </div>
-
   <footer>
     SIMULATEUR INTERNE — À TITRE D'AIDE À LA PLANIFICATION UNIQUEMENT · NE REMPLACE PAS LA CONVENTION COLLECTIVE 2022-2026<br>
     Horaire de base : horaire maître ABCDG (2026_ABCDG.pdf) — disponibilité des réservistes E/F/G éditable manuellement (donnée source non structurée)
@@ -3124,6 +3115,7 @@ function renderJoStat(){
 }
 
 function renderSummary(){
+  if(!document.getElementById('summaryBody')) return; // panneau "Résumé de la semaine" retiré — pas d'erreur si encore appelé ailleurs
   const w = WEEKS[weekIndex];
   const body = document.getElementById('summaryBody');
   body.innerHTML='';
