@@ -1822,18 +1822,19 @@ function computeCell(empCode, dayIdx){
   return computeCellBase(empCode, dayIdx);
 }
 /* Détermine, parmi les jours restants (hors vacances/congé/maladie, jours de semaine seulement —
-   les réservistes n'ont jamais de JO le week-end), lesquels un réserviste E/F/G doit encore
-   afficher "disponible" cette semaine, compte tenu de son quota déjà entamé (comblement, même
-   hors de son horaire maître habituel). LA PLACE précise de ce(s) jour(s) restant(s) n'est PAS
-   fixée par l'horaire maître — la Procédure — Gestion des relèves pt. 9 exige de coller la
-   continuité aux jours déjà travaillés cette semaine : on cherche donc d'abord le prochain jour
-   de semaine libre APRÈS le dernier jour déjà travaillé, puis, si le quota permet plus d'un jour,
-   on continue vers l'avant, et seulement ensuite vers l'arrière avant le premier jour travaillé.
-   Résultat mis en cache le temps du rendu courant.
-   Exemple : Lapierre travaille dimanche + lundi (comblement hors-horaire) ; son quota total (3)
-   est entamé de 2 → il ne reste qu'1 jour de disponibilité réelle, et c'est mardi (immédiatement
-   après lundi) qui doit rester affiché "JO disponible" — peu importe que mardi ne soit pas un de
-   ses jours JO habituels dans l'horaire maître. */
+   les réservistes n'ont jamais de JO le week-end, ET jamais un jour qui créerait un enchaînement
+   de plus de 12h consécutives sans repos avec un jour déjà travaillé — ex. un jour immédiatement
+   après une nuit travaillée est exclu, puisqu'il pourrait devenir un quart de jour sans repos),
+   lesquels un réserviste E/F/G doit encore afficher "disponible" cette semaine, compte tenu de son
+   quota déjà entamé (comblement, même hors de son horaire maître habituel). LA PLACE précise de
+   ce(s) jour(s) restant(s) n'est PAS fixée par l'horaire maître — la Procédure — Gestion des
+   relèves pt. 9 exige de coller la continuité aux jours déjà travaillés cette semaine (avant OU
+   après le bloc) tout en respectant la règle des 12h consécutives : on cherche donc d'abord le
+   prochain jour de semaine libre ET valide APRÈS le dernier jour déjà travaillé, puis vers
+   l'arrière avant le premier jour travaillé si besoin. Résultat mis en cache le temps du rendu.
+   Exemple : Lapierre travaille lundi + mardi en nuit (comblement) ; mercredi serait normalement le
+   plus proche, mais l'enchaînement nuit-mardi puis jour-mercredi violerait la règle des 12h — donc
+   c'est jeudi qui reste affiché "JO disponible", pas mercredi. */
 const _keptJoDaysCache = new Map();
 function getKeptJoDays(empCode, w){
   const week = w || WEEKS[weekIndex];
@@ -1845,17 +1846,23 @@ function getKeptJoDays(empCode, w){
   const remaining = Math.max(0, quota - usedCount);
 
   const workingDays = [];
+  const workingType = {}; // dayIdx -> 'j'|'n', pour vérifier la règle des 12h consécutives
   for(let i=0;i<7;i++){
-    const coveredHere = simResult && simResult.some(a=>a.coveredBy===empCode && a.dayIdx===i);
-    if(coveredHere){ workingDays.push(i); continue; }
+    const coverAssignment = simResult && simResult.find(a=>a.coveredBy===empCode && a.dayIdx===i);
+    if(coverAssignment){ workingDays.push(i); workingType[i] = coverAssignment.shift; continue; }
     const base = baseCellStatus(empCode, i);
-    if(base.cls==='j' || base.cls==='n') workingDays.push(i);
+    if(base.cls==='j' || base.cls==='n'){ workingDays.push(i); workingType[i] = base.cls; }
   }
-  // Jours candidats : lundi à vendredi (1 à 5) seulement, ni déjà travaillés, ni en absence.
+  // Jours candidats : lundi à vendredi (1 à 5) seulement, ni déjà travaillés, ni en absence, ET
+  // qui ne créeraient pas un enchaînement de plus de 12h consécutives avec un jour déjà travaillé
+  // (ex. jour juste après une nuit travaillée — pourrait devenir un quart de jour sans repos).
   const candidates = [];
   for(let i=1;i<=5;i++){
     if(workingDays.includes(i)) continue;
     if(isVacDay(empCode, i, week)) continue;
+    const prevViolation = workingType[i-1] && shiftsAdjacent(i-1, workingType[i-1], i, 'j');
+    const nextViolation = workingType[i+1] && shiftsAdjacent(i, 'n', i+1, workingType[i+1]);
+    if(prevViolation || nextViolation) continue;
     candidates.push(i);
   }
 
