@@ -370,8 +370,10 @@ tr:hover td.emp-col{background:#1a222d;}
 
 .shift-cell{min-width:108px;user-select:none;-webkit-user-select:none;}
 .shift{
-  display:inline-block;border-radius:7px;padding:6px 4px;font-family:'JetBrains Mono',monospace;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  border-radius:7px;padding:6px 4px;font-family:'JetBrains Mono',monospace;
   font-size:10.8px;line-height:1.5;font-weight:500;position:relative;
+  width:100%;box-sizing:border-box;min-height:44px;
 }
 .orig-badge{
   position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;
