@@ -3523,23 +3523,33 @@ function populateDashYearSelect(){
 
 function computeYearStats(year){
   const stats = {};
-  EMPLOYEES.forEach(e=>{ stats[e.code] = {conge:0, maladie:0, vac:0, remplacements:0, surtemps:0, nonResolu:0}; });
+  EMPLOYEES.forEach(e=>{
+    stats[e.code] = {
+      conge:0, maladie:0, vac:0,
+      remplacementsJ:0, remplacementsN:0, remplacements:0,
+      surtempsAcceptes:0, surtempsRefuses:0, nonResolu:0
+    };
+  });
 
   const yearWeeks = WEEKS.filter(w=>w.start.getFullYear()===year);
 
-  // 1) Congés / maladies / vacances — direct depuis vacDays, aucune simulation requise.
+  // 1) Congés / maladies — direct depuis vacDays, au jour près (peuvent être fractionnés).
+  //    Vacances — comptées par SEMAINE (bloc), pas par jour : "les vacances ne se fractionnent
+  //    pas par journée" (art. 22) — une semaine complète de vacances doit afficher 1, pas 7.
   yearWeeks.forEach(w=>{
-    w.days.forEach(day=>{
-      EMPLOYEES.forEach(e=>{
+    EMPLOYEES.forEach(e=>{
+      let hasVacThisWeek = false;
+      w.days.forEach(day=>{
         const t = vacDays.get(e.code+'|'+ymd(day.date));
         if(t==='conge') stats[e.code].conge++;
         else if(t==='maladie') stats[e.code].maladie++;
-        else if(t==='vac') stats[e.code].vac++;
+        else if(t==='vac') hasVacThisWeek = true;
       });
+      if(hasVacThisWeek) stats[e.code].vac++;
     });
   });
 
-  // 2) Remplacements / surtemps — relance le vrai moteur pour chaque semaine concernée.
+  // 2) Remplacements (J/N) / surtemps — relance le vrai moteur pour chaque semaine concernée.
   const savedWeekIndex = weekIndex;
   const savedSimResult = simResult;
   const savedShowReal = showReal;
@@ -3555,10 +3565,24 @@ function computeYearStats(year){
         if(!a.coveredBy){ if(stats[a.who]) stats[a.who].nonResolu++; return; }
         if(!stats[a.coveredBy]) return;
         stats[a.coveredBy].remplacements++;
-        if(a.result.type==='ot') stats[a.coveredBy].surtemps++;
+        if(a.shift==='j') stats[a.coveredBy].remplacementsJ++; else stats[a.coveredBy].remplacementsN++;
+        if(a.result.type==='ot') stats[a.coveredBy].surtempsAcceptes++;
       });
     }
   });
+
+  // 3) Surtemps refusés — otConfirmations est peuplé au fil des simulations ci-dessus (clé
+  //    "YYYY-MM-DD:j|n" -> {refused:Set(codes), accepted:code|null}). On ne compte que les
+  //    refus dont la date tombe dans l'année choisie.
+  Object.keys(otConfirmations).forEach(shiftKey=>{
+    const dateStr = shiftKey.split(':')[0];
+    if(!dateStr.startsWith(String(year))) return;
+    const conf = otConfirmations[shiftKey];
+    if(conf && conf.refused){
+      conf.refused.forEach(code=>{ if(stats[code]) stats[code].surtempsRefuses++; });
+    }
+  });
+
   weekIndex = savedWeekIndex;
   simResult = savedSimResult;
   showReal = savedShowReal;
@@ -3569,17 +3593,19 @@ function computeYearStats(year){
 
 let dashCurrentStats = null;
 let dashCurrentYear = null;
-let dashSortKey = 'remplacements';
+let dashSortKey = 'remplacementsJ';
 let dashSortAsc = false;
 let dashView = 'table'; // 'table' | 'chart'
-let dashChartMetric = 'remplacements';
+let dashChartMetric = 'remplacementsJ';
 
 const DASH_METRICS = [
   {key:'conge', label:'Congés', color:'#9abf91'},
   {key:'maladie', label:'Maladie', color:'#d878a0'},
-  {key:'vac', label:'Vacances', color:'#39e678'},
-  {key:'remplacements', label:'Remplacements', color:'#5b93cc'},
-  {key:'surtemps', label:'Surtemps', color:'#e2a13d'},
+  {key:'vac', label:'Vacances (sem.)', color:'#39e678'},
+  {key:'remplacementsJ', label:'Remplacements J', color:'#e2a13d'},
+  {key:'remplacementsN', label:'Remplacements N', color:'#5b93cc'},
+  {key:'surtempsAcceptes', label:'Surtemps accepté', color:'#c8912e'},
+  {key:'surtempsRefuses', label:'Surtemps refusé', color:'#9a7a52'},
   {key:'nonResolu', label:'Non résolu', color:'#e0645f'},
 ];
 
@@ -3607,16 +3633,20 @@ function renderDashboard(){
   const totalConge = dashTotal(stats,'conge');
   const totalMaladie = dashTotal(stats,'maladie');
   const totalVac = dashTotal(stats,'vac');
-  const totalRemp = dashTotal(stats,'remplacements');
-  const totalOt = dashTotal(stats,'surtemps');
+  const totalRempJ = dashTotal(stats,'remplacementsJ');
+  const totalRempN = dashTotal(stats,'remplacementsN');
+  const totalOtAcc = dashTotal(stats,'surtempsAcceptes');
+  const totalOtRef = dashTotal(stats,'surtempsRefuses');
   const totalGap = dashTotal(stats,'nonResolu');
 
   let html = `<div class="dash-kpi-row">
     <div class="dash-kpi" style="--accent-color:#9abf91;"><div class="num">${totalConge}</div><div class="lbl">Jours de congé (${year})</div></div>
     <div class="dash-kpi" style="--accent-color:#d878a0;"><div class="num">${totalMaladie}</div><div class="lbl">Jours de maladie</div></div>
-    <div class="dash-kpi" style="--accent-color:#39e678;"><div class="num">${totalVac}</div><div class="lbl">Jours de vacances</div></div>
-    <div class="dash-kpi" style="--accent-color:#5b93cc;"><div class="num">${totalRemp}</div><div class="lbl">Remplacements effectués</div></div>
-    <div class="dash-kpi" style="--accent-color:#e2a13d;"><div class="num">${totalOt}</div><div class="lbl">Quarts en surtemps</div></div>
+    <div class="dash-kpi" style="--accent-color:#39e678;"><div class="num">${totalVac}</div><div class="lbl">Semaines de vacances</div></div>
+    <div class="dash-kpi" style="--accent-color:#e2a13d;"><div class="num">${totalRempJ}</div><div class="lbl">Remplacements — jour</div></div>
+    <div class="dash-kpi" style="--accent-color:#5b93cc;"><div class="num">${totalRempN}</div><div class="lbl">Remplacements — nuit</div></div>
+    <div class="dash-kpi" style="--accent-color:#c8912e;"><div class="num">${totalOtAcc}</div><div class="lbl">Surtemps accepté</div></div>
+    <div class="dash-kpi" style="--accent-color:#9a7a52;"><div class="num">${totalOtRef}</div><div class="lbl">Surtemps refusé</div></div>
     <div class="dash-kpi" style="--accent-color:#e0645f;"><div class="num">${totalGap}</div><div class="lbl">Quarts non résolus</div></div>
   </div>`;
 
@@ -3653,8 +3683,10 @@ function buildDashTableHTML(stats){
   DASH_METRICS.forEach(m=> maxes[m.key] = Math.max(1, ...rows.map(r=>r[m.key])));
 
   const cols = [
-    {key:'conge', label:'Congés'}, {key:'maladie', label:'Maladie'}, {key:'vac', label:'Vacances'},
-    {key:'remplacements', label:'Remplacements'}, {key:'surtemps', label:'Surtemps'}, {key:'nonResolu', label:'Non résolu'}
+    {key:'conge', label:'Congés'}, {key:'maladie', label:'Maladie'}, {key:'vac', label:'Vacances (sem.)'},
+    {key:'remplacementsJ', label:'Remplacements J'}, {key:'remplacementsN', label:'Remplacements N'},
+    {key:'surtempsAcceptes', label:'Surtemps accepté'}, {key:'surtempsRefuses', label:'Surtemps refusé'},
+    {key:'nonResolu', label:'Non résolu'}
   ];
   let html = `<table class="dash-table"><thead><tr>
     <th data-sortkey="code">Employé</th>
