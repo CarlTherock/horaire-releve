@@ -1821,17 +1821,19 @@ function computeCell(empCode, dayIdx){
   }
   return computeCellBase(empCode, dayIdx);
 }
-/* Détermine, parmi les jours JO officiels (horaire maître) d'un réserviste E/F/G encore non
-   utilisés pour du comblement cette semaine, lesquels restent réellement "disponibles" compte
-   tenu de son quota hebdomadaire déjà entamé — et LESQUELS précisément, en priorisant les jours
-   CONSÉCUTIFS à ceux déjà travaillés (Procédure — Gestion des relèves, pt. 9), pas un choix
-   arbitraire. Résultat mis en cache le temps du rendu courant (une entrée par code, invalidée à
-   chaque nouvelle simulation via la clé simResult elle-même).
-   Exemple : Lapierre est appelé hors-horaire lundi+mardi pour combler Bruneau ; son horaire maître
-   Jo lui donne normalement 3 jours (mer./jeu./ven.) mais son quota total (3) est déjà entamé par
-   ces 2 jours empruntés — il ne lui reste qu'1 jour de disponibilité réelle, et comme la procédure
-   priorise la continuité, c'est mercredi (collé à mardi) qui reste affiché "JO disponible", pas
-   jeudi ni vendredi. */
+/* Détermine, parmi les jours restants (hors vacances/congé/maladie, jours de semaine seulement —
+   les réservistes n'ont jamais de JO le week-end), lesquels un réserviste E/F/G doit encore
+   afficher "disponible" cette semaine, compte tenu de son quota déjà entamé (comblement, même
+   hors de son horaire maître habituel). LA PLACE précise de ce(s) jour(s) restant(s) n'est PAS
+   fixée par l'horaire maître — la Procédure — Gestion des relèves pt. 9 exige de coller la
+   continuité aux jours déjà travaillés cette semaine : on cherche donc d'abord le prochain jour
+   de semaine libre APRÈS le dernier jour déjà travaillé, puis, si le quota permet plus d'un jour,
+   on continue vers l'avant, et seulement ensuite vers l'arrière avant le premier jour travaillé.
+   Résultat mis en cache le temps du rendu courant.
+   Exemple : Lapierre travaille dimanche + lundi (comblement hors-horaire) ; son quota total (3)
+   est entamé de 2 → il ne reste qu'1 jour de disponibilité réelle, et c'est mardi (immédiatement
+   après lundi) qui doit rester affiché "JO disponible" — peu importe que mardi ne soit pas un de
+   ses jours JO habituels dans l'horaire maître. */
 const _keptJoDaysCache = new Map();
 function getKeptJoDays(empCode, w){
   const week = w || WEEKS[weekIndex];
@@ -1842,23 +1844,37 @@ function getKeptJoDays(empCode, w){
   const usedCount = simResult ? simResult.filter(a=>a.coveredBy===empCode).length : 0;
   const remaining = Math.max(0, quota - usedCount);
 
-  const candidates = [];
   const workingDays = [];
   for(let i=0;i<7;i++){
     const coveredHere = simResult && simResult.some(a=>a.coveredBy===empCode && a.dayIdx===i);
     if(coveredHere){ workingDays.push(i); continue; }
     const base = baseCellStatus(empCode, i);
-    if(base.cls==='jo') candidates.push(i);
-    else if(base.cls==='j' || base.cls==='n') workingDays.push(i);
+    if(base.cls==='j' || base.cls==='n') workingDays.push(i);
+  }
+  // Jours candidats : lundi à vendredi (1 à 5) seulement, ni déjà travaillés, ni en absence.
+  const candidates = [];
+  for(let i=1;i<=5;i++){
+    if(workingDays.includes(i)) continue;
+    if(isVacDay(empCode, i, week)) continue;
+    candidates.push(i);
   }
 
   let kept;
-  if(remaining >= candidates.length){
-    kept = new Set(candidates); // quota suffisant : tous ses jours JO officiels restent disponibles
+  if(remaining <= 0){
+    kept = new Set();
+  } else if(workingDays.length === 0){
+    // Rien travaillé encore cette semaine : pas de point d'ancrage — on retombe sur ses jours JO
+    // officiels de l'horaire maître, comportement normal.
+    const masterJo = candidates.filter(i => baseCellStatus(empCode, i).cls==='jo');
+    kept = new Set(masterJo.slice(0, remaining));
   } else {
-    const distanceToWork = (day)=> workingDays.length ? Math.min(...workingDays.map(d=>Math.abs(d-day))) : 99;
-    const sorted = [...candidates].sort((a,b)=> distanceToWork(a)-distanceToWork(b) || a-b);
-    kept = new Set(sorted.slice(0, remaining));
+    const lastWorked = Math.max(...workingDays);
+    const firstWorked = Math.min(...workingDays);
+    const priority = [];
+    for(let d=lastWorked+1; d<=5; d++) if(candidates.includes(d)) priority.push(d);
+    for(let d=firstWorked-1; d>=1; d--) if(candidates.includes(d)) priority.push(d);
+    candidates.forEach(d=>{ if(!priority.includes(d)) priority.push(d); }); // filet de sécurité
+    kept = new Set(priority.slice(0, remaining));
   }
   _keptJoDaysCache.set(cacheKey, kept);
   return kept;
@@ -1898,16 +1914,18 @@ function computeCellBase(empCode, dayIdx){
       return {cls, hours, tag: label};
     }
     // 2) Ce Jo (E/F/G) a un quota hebdomadaire limité (joQuotaFor) — s'il a déjà été appelé cette
-    //    semaine (comblement, même hors de son horaire JO habituel), les jours restants qui
-    //    dépassent son quota n'ont plus de disponibilité réelle à offrir. Procédure — Gestion des
-    //    relèves, pt. 9 : priorité aux journées CONSÉCUTIVES — donc parmi ses jours JO officiels
-    //    encore non utilisés, on garde en priorité ceux collés à un jour déjà travaillé cette
-    //    semaine (son propre horaire ou un comblement), pas n'importe lesquels.
+    //    semaine (comblement, même hors de son horaire JO habituel), le(s) jour(s) de disponibilité
+    //    restant(s) ne sont pas forcément ceux marqués "jo" dans l'horaire maître : la Procédure —
+    //    Gestion des relèves pt. 9 exige de recoller la continuité au(x) jour(s) déjà travaillé(s)
+    //    — getKeptJoDays() recalcule DYNAMIQUEMENT quel(s) jour(s) précis doivent rester
+    //    "disponible", indépendamment de ce que l'horaire maître prévoyait ce jour-là.
     if(['E','F','G'].includes(empCode)){
       const base = baseCellStatus(empCode, dayIdx);
-      if(base.cls==='jo'){
+      const isWeekday = dayIdx>=1 && dayIdx<=5;
+      if(isWeekday && !isVacDay(empCode, dayIdx, w) && base.cls!=='j' && base.cls!=='n'){
         const kept = getKeptJoDays(empCode, w);
-        if(!kept.has(dayIdx)) return {cls:'off', hours:'—', tag:null};
+        if(kept.has(dayIdx)) return {cls:'jo', hours:'JO', tag:'disponible'};
+        if(base.cls==='jo') return {cls:'off', hours:'—', tag:null};
       }
     }
   }
