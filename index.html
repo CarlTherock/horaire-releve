@@ -1953,18 +1953,23 @@ function buildScheduleHTML(w, isReal, interactive){
     const clickable = !isReal && !['H','I','J'].includes(emp.code);
     w.days.forEach((day,i)=>{
       const c = computeCell(emp.code, i);
+      // En mode "Relève seulement", un JO disponible (non assigné) n'est pas un vrai quart
+      // travaillé — on ne veut voir que J/N réels dans cette vue filtrée, donc on l'affiche
+      // comme une case vide plutôt que "JO disponible".
+      const cBaseCls = (c.cls || '').split(' ')[0];
+      const dc = (filterWorkersOnly && cBaseCls === 'jo') ? {cls:'off', hours:'—', tag:'', badge:null} : c;
       const canToggle = clickable && worksThisDay(emp.code, i, w) && !c.swapped;
-      const t = truncTag(c.tag, 15);
-      const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
-      const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
+      const t = truncTag(dc.tag, 15);
+      const tagHtml = dc.tag ? `<span class="tag">${t.short}</span>` : '';
+      const badgeHtml = dc.badge ? `<span class="orig-badge orig-badge-${dc.badge}">${dc.badge.toUpperCase()}</span>` : '';
       const requesterTag = c.swapIsRequester ? ' (demandeur de l\'échange)' : '';
       const swapTooltip = c.swapEmptied
         ? `Quart cédé à ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher la case déplacée pour annuler l'échange`
         : `Quart déplacé ici suite à l'échange avec ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]})${requesterTag} — toucher pour annuler l'échange`;
       // Le rond d'annulation n'apparaît que sur la case qui affiche le quart déplacé (destination) —
       // pas sur la case vide d'origine, qui n'a rien à "annuler" visuellement dessus.
-      const swapDotHtml = (c.swapped && !c.swapEmptied) ? `<span class="swap-dot" data-swap-remove="1" title="${swapTooltip}">🔄</span>` : '';
-      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}${c.swapEmptied?` title="${swapTooltip}"`:''}><span class="shift ${c.cls}">${badgeHtml}${swapDotHtml}${c.hours}${tagHtml}</span></td>`;
+      const swapDotHtml = (c.swapped && !c.swapEmptied && dc===c) ? `<span class="swap-dot" data-swap-remove="1" title="${swapTooltip}">🔄</span>` : '';
+      cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}${c.swapEmptied?` title="${swapTooltip}"`:''}><span class="shift ${dc.cls}">${badgeHtml}${swapDotHtml}${dc.hours}${tagHtml}</span></td>`;
     });
     bodyHTML += `<tr>${cells}</tr>`;
   });
