@@ -425,6 +425,8 @@ tr:hover td.emp-col{background:#1a222d;}
 .chip-toggle.jo-toggle.active-conge{background:rgba(154,178,145,0.12);border-color:#9abf91;color:#a9cfa0;border-style:solid;}
 .chip-toggle.jo-toggle.active-maladie{background:rgba(216,120,160,0.18);border-color:#d878a0;color:#e6a0c4;border-style:solid;}
 .chip-toggle.jo-toggle.active-vac{background:rgba(57,230,120,0.16);border-color:#39e678;color:#4bffa0;border-style:solid;}
+.chip-toggle.jo-toggle.chip-borrowed{box-shadow:0 0 0 1px rgba(224,161,61,0.35) inset;}
+.chip-toggle.jo-toggle.chip-borrowed::after{content:'⚡';font-size:9px;margin-left:3px;opacity:.8;}
 
 .vac-row{
   display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);
@@ -910,7 +912,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
           <div id="vacDayPicker"></div>
         </div>
         <div class="field-group">
-          <label class="title">Réservistes (E·F·G) — indisponibilité ponctuelle (jour précis, hors vacances)</label>
+          <label class="title">Réservistes (E·F·G) et renfort de jour (H·I·J) — indisponibilité ponctuelle (jour précis, hors vacances)</label>
           <div class="chip-row" id="joChips"></div>
           <p style="font-size:11px;color:var(--text-dim2);margin:8px 2px 0;line-height:1.5;">
             Le nombre de JO disponibles par semaine correspond normalement au nombre de journées de congé accordées cette semaine-là — sauf durant les <b>semaines doubles</b> de la période estivale, où cette correspondance ne s'applique pas.
@@ -2020,7 +2022,7 @@ function buildScheduleHTML(w, isReal, interactive){
   let bodyHTML = '';
   emps.forEach(emp=>{
     let cells = `<td class="emp-col"><div class="emp-badge"><span class="letter-chip">${emp.code}</span><div><div>${displayName(emp.code)}</div><div class="emp-role">${emp.role}</div></div></div></td>`;
-    const clickable = !isReal && !['H','I','J'].includes(emp.code);
+    const clickable = !isReal;
     w.days.forEach((day,i)=>{
       const c = computeCell(emp.code, i);
       // En mode "Relève seulement", un JO disponible (non assigné) n'est pas un vrai quart
@@ -2028,7 +2030,11 @@ function buildScheduleHTML(w, isReal, interactive){
       // comme une case vide plutôt que "JO disponible".
       const cBaseCls = (c.cls || '').split(' ')[0];
       const dc = (filterWorkersOnly && cBaseCls === 'jo') ? {cls:'off', hours:'—', tag:'', badge:null} : c;
-      const canToggle = clickable && worksThisDay(emp.code, i, w) && !c.swapped;
+      // H/I/J n'ont pas d'horaire fixe — congé/maladie n'a de sens sur leur case que s'ils ont
+      // réellement une affectation de renfort de jour (EQ RELEVE) cette semaine-là ; sinon la case
+      // est vide et il n'y a rien à demander en congé dessus.
+      const hijHasAssignment = !['H','I','J'].includes(emp.code) || (simResult && simResult.some(a=>a.coveredBy===emp.code && a.dayIdx===i));
+      const canToggle = clickable && worksThisDay(emp.code, i, w) && hijHasAssignment && !c.swapped;
       const t = truncTag(dc.tag, 15);
       const tagHtml = dc.tag ? `<span class="tag">${t.short}</span>` : '';
       const badgeHtml = dc.badge ? `<span class="orig-badge orig-badge-${dc.badge}">${dc.badge.toUpperCase()}</span>` : '';
@@ -2629,12 +2635,34 @@ function renderChips(){
   const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
   ['E','F','G'].forEach(code=>{
     w.days.forEach((day,i)=>{
-      if(weekJo && weekJo[code] && weekJo[code][i]!=='o') return; // pas un jour JO cette semaine-là : rien à basculer
+      const isMasterJoDay = weekJo && weekJo[code] && weekJo[code][i]==='o';
+      // Inclut aussi les jours où une simulation en cours l'a assigné à combler quelqu'un
+      // d'autre HORS de son horaire JO habituel (ex. Lapierre appelé un lundi qui n'est
+      // normalement pas son jour JO) — sinon impossible de demander congé/maladie sur ce
+      // quart de remplacement pourtant bien réel cette semaine-là.
+      const isComblementDay = simResult && simResult.some(a=>a.coveredBy===code && a.dayIdx===i);
+      if(!isMasterJoDay && !isComblementDay) return; // ni jour JO habituel, ni comblement : rien à basculer
       const vt = vacType(code, i, w); // null | 'conge' | 'maladie' | 'vac'
       const chip = document.createElement('div');
-      chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '');
+      chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '') + (isComblementDay && !isMasterJoDay ? ' chip-borrowed' : '');
       chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}`;
-      chip.title = vt ? `Cliquer pour retirer (${vt})` : 'Cliquer : disponible → Congé → Maladie';
+      chip.title = (vt ? `Cliquer pour retirer (${vt})` : 'Cliquer : disponible → Congé → Maladie')
+        + (isComblementDay && !isMasterJoDay ? ' — quart de remplacement hors horaire habituel' : '');
+      chip.onclick = ()=> toggleVacDay(code, i, w);
+      jChips.appendChild(chip);
+    });
+  });
+  // Renfort de jour (H·I·J) : seulement les jours où ils ont réellement une affectation EQ
+  // RELEVE cette semaine-là (pas d'horaire fixe sinon, rien à basculer).
+  ['H','I','J'].forEach(code=>{
+    w.days.forEach((day,i)=>{
+      const hasAssignment = simResult && simResult.some(a=>a.coveredBy===code && a.dayIdx===i);
+      if(!hasAssignment) return;
+      const vt = vacType(code, i, w);
+      const chip = document.createElement('div');
+      chip.className = 'chip-toggle jo-toggle' + (vt ? ` active active-${vt}` : '') + ' chip-borrowed';
+      chip.innerHTML = `<span class="mini-chip">${code}</span> ${DAY_LABELS[i]}`;
+      chip.title = (vt ? `Cliquer pour retirer (${vt})` : 'Cliquer : disponible → Congé → Maladie') + ' — renfort de jour';
       chip.onclick = ()=> toggleVacDay(code, i, w);
       jChips.appendChild(chip);
     });
