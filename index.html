@@ -723,6 +723,40 @@ tr:hover td.emp-col{background:#1a222d;}
 .name-edit-row input:focus{outline:none;border-color:#5a7a9a;}
 .name-edit-row input::placeholder{color:var(--text-dim2);font-style:italic;}
 .name-edit-row .name-role{font-size:9.5px;color:var(--text-dim2);font-family:'JetBrains Mono',monospace;flex:none;max-width:80px;}
+.name-hist-btn{
+  flex:none;background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim);
+  border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;transition:.15s;
+}
+.name-hist-btn:hover{color:var(--text);border-color:#5a7a9a;}
+.name-hist-panel{
+  background:var(--panel-3);border:1px solid var(--line);border-radius:8px;
+  padding:12px 14px;margin:-4px 0 6px;
+}
+.name-hist-intro{font-size:11px;color:var(--text-dim2);line-height:1.5;margin-bottom:10px;}
+.name-hist-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.name-hist-entry{
+  display:flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:6px;padding:6px 10px;font-size:12.5px;
+}
+.name-hist-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--jour);flex:none;}
+.name-hist-name{flex:1;}
+.name-hist-remove{
+  flex:none;background:none;border:none;color:var(--text-dim2);cursor:pointer;font-size:12px;padding:2px 6px;
+}
+.name-hist-remove:hover{color:var(--alert);}
+.name-hist-add{display:flex;gap:8px;flex-wrap:wrap;}
+.name-hist-input-name{
+  flex:1;min-width:140px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;
+  color:var(--text);font-family:'Oswald',sans-serif;font-size:12.5px;padding:6px 8px;
+}
+.name-hist-input-date{
+  background:var(--panel-2);border:1px solid var(--line);border-radius:6px;
+  color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:5px 8px;
+}
+.name-hist-add-btn{
+  flex:none;background:var(--jour-dim);border:1px solid var(--jour);color:var(--jour);
+  border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;
+}
 .seniority-row .rank-num{
   font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim2);
   width:20px;flex:none;text-align:center;
@@ -1226,6 +1260,31 @@ function displayName(code){
   if(REAL_NAMES[code] && REAL_NAMES[code].trim()) return REAL_NAMES[code];
   if(['H','I','J'].includes(code)) return 'À déterminer';
   return code;
+}
+/* ============================================================
+   HISTORIQUE DES NOMS PAR LETTRE — pour le tableau de bord annuel
+   Une lettre (ex. E) peut être occupée par des personnes différentes au fil du temps. Le
+   tableau de bord doit pouvoir attribuer les statistiques à la bonne PERSONNE selon la date, pas
+   seulement au nom actuellement affiché dans l'outil (qui ne reflète que "maintenant").
+   Structure : code -> [{name, from:"YYYY-MM-DD"}, ...] triée chronologiquement (from croissant).
+   "from" = premier jour où ce nom occupe la lettre ; la période se termine la veille du "from"
+   suivant (ou continue jusqu'à aujourd'hui pour la dernière entrée). Renseigné manuellement par
+   Carl au moment d'un changement de personne — pas de "to" à saisir, seulement la date de début
+   du nouveau titulaire. Persiste comme REAL_NAMES (sauvegarde/export inclus). */
+let nameHistory = {}; // code -> [{name, from}, ...]
+/* Nom qui occupait la lettre "code" à la date ISO donnée, selon l'historique enregistré. Si
+   aucun historique n'existe pour cette lettre, ou si la date précède la toute première entrée
+   connue, retombe sur le nom ACTUEL (displayName) — meilleure hypothèse par défaut tant que Carl
+   n'a pas renseigné de changement antérieur. */
+function nameForDate(code, isoDate){
+  const hist = nameHistory[code];
+  if(!hist || hist.length===0) return displayName(code);
+  const sorted = [...hist].sort((a,b)=> a.from < b.from ? -1 : a.from > b.from ? 1 : 0);
+  let result = null;
+  for(const entry of sorted){
+    if(entry.from <= isoDate) result = entry.name; else break;
+  }
+  return result || sorted[0].name;
 }
 /* H, I, J (renfort de jour "au besoin") ne s'affichent dans la grille et ailleurs que s'ils ont
    réellement un quart (ou une absence marquée — vacances/congé/maladie) cette semaine-là — sinon
@@ -1742,10 +1801,11 @@ function saveState(){
       weekStart: ymd(WEEKS[weekIndex].start),
       showReal, filterWorkersOnly, currentDayIdx, seniorityOrder,
       vacDays: Array.from(vacDays.entries()),
-      manualSwaps: Array.from(manualSwaps.entries()),
+      manualSwaps: manualSwaps,
       unavailableJo: Array.from(unavailableJo),
       otConfirmations: otConfSerializable,
       realNames: REAL_NAMES,
+      nameHistory,
       vacImportHistory,
       importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])]))
     }));
@@ -1766,6 +1826,9 @@ function loadState(){
     if(s.realNames && typeof s.realNames==='object'){
       REAL_NAMES = s.realNames;
     }
+    if(s.nameHistory && typeof s.nameHistory==='object'){
+      nameHistory = s.nameHistory;
+    }
     if(Array.isArray(s.vacImportHistory)) vacImportHistory = s.vacImportHistory;
     if(s.importedVacKeys && typeof s.importedVacKeys==='object'){
       importedVacKeys = {};
@@ -1776,7 +1839,7 @@ function loadState(){
       seniorityOrder = s.seniorityOrder;
     }
     if(Array.isArray(s.vacDays)) vacDays = new Map(s.vacDays);
-    if(Array.isArray(s.manualSwaps)) manualSwaps = new Map(s.manualSwaps);
+    if(Array.isArray(s.manualSwaps)) manualSwaps = s.manualSwaps;
     if(Array.isArray(s.unavailableJo)) unavailableJo = new Set(s.unavailableJo);
     if(s.otConfirmations && typeof s.otConfirmations==='object'){
       otConfirmations = {};
@@ -2296,10 +2359,12 @@ function renderNamesEditor(){
     const row = document.createElement('div');
     row.className = 'name-edit-row';
     const isOptional = ['H','I','J'].includes(emp.code);
+    const histCount = (nameHistory[emp.code]||[]).length;
     row.innerHTML = `
       <span class="letter-chip">${emp.code}</span>
       <input type="text" value="${(REAL_NAMES[emp.code]||'').replace(/"/g,'&quot;')}" placeholder="${isOptional?'Nom (laisser vide = masqué)':'Nom, Prénom'}">
       <span class="name-role">${emp.role.split('(')[0].trim()}</span>
+      <button type="button" class="name-hist-btn" data-code="${emp.code}" title="Historique des changements de personne (pour le tableau de bord)">🕐${histCount?` ${histCount}`:''}</button>
     `;
     const input = row.querySelector('input');
     input.oninput = ()=>{
@@ -2308,9 +2373,71 @@ function renderNamesEditor(){
       refreshAll();
       renderVacCalendarPreview();
     };
+    row.querySelector('.name-hist-btn').onclick = ()=> toggleNameHistoryPanel(emp.code, row);
     editor.appendChild(row);
+    const histPanel = document.createElement('div');
+    histPanel.className = 'name-hist-panel';
+    histPanel.id = 'nameHist-'+emp.code;
+    histPanel.style.display = 'none';
+    editor.appendChild(histPanel);
   });
 }
+
+/* Panneau "historique des personnes" pour une lettre — affiche les changements déjà enregistrés
+   et permet d'en ajouter un (nom + date à partir de laquelle il occupe la lettre). Utilisé
+   uniquement par le tableau de bord annuel pour attribuer les statistiques à la bonne personne
+   selon la date, sans jamais affecter l'affichage courant (grille, impression, etc.) qui continue
+   d'utiliser REAL_NAMES (le nom actuel) comme avant. */
+function toggleNameHistoryPanel(code, row){
+  const panel = document.getElementById('nameHist-'+code);
+  const opening = panel.style.display === 'none';
+  document.querySelectorAll('.name-hist-panel').forEach(p=> p.style.display='none');
+  if(opening){ panel.style.display='block'; renderNameHistoryPanel(code); }
+}
+function renderNameHistoryPanel(code){
+  const panel = document.getElementById('nameHist-'+code);
+  const hist = (nameHistory[code]||[]).slice().sort((a,b)=> a.from < b.from ? -1 : a.from > b.from ? 1 : 0);
+  let html = `<div class="name-hist-intro">Historique des personnes ayant occupé la lettre ${code} — sert uniquement au tableau de bord annuel pour attribuer les statistiques à la bonne personne selon la date. Le nom affiché partout ailleurs dans l'outil reste celui du champ ci-dessus.</div>`;
+  if(hist.length){
+    html += '<div class="name-hist-list">' + hist.map((entry,idx)=>
+      `<div class="name-hist-entry"><span class="name-hist-date">${fmtDate(new Date(entry.from+'T00:00:00'),{day:'2-digit',month:'short',year:'numeric'})} →</span><span class="name-hist-name">${entry.name}</span><button type="button" class="name-hist-remove" data-code="${code}" data-idx="${idx}" title="Retirer cette entrée">✕</button></div>`
+    ).join('') + '</div>';
+  }
+  html += `<div class="name-hist-add">
+    <input type="text" class="name-hist-input-name" placeholder="Nom de la nouvelle personne">
+    <input type="date" class="name-hist-input-date">
+    <button type="button" class="name-hist-add-btn" data-code="${code}">+ Ajouter</button>
+  </div>`;
+  panel.innerHTML = html;
+  panel.querySelectorAll('.name-hist-remove').forEach(btn=>{
+    btn.onclick = ()=>{
+      const c = btn.dataset.code, idx = parseInt(btn.dataset.idx,10);
+      const sorted = (nameHistory[c]||[]).slice().sort((a,b)=> a.from < b.from ? -1 : a.from > b.from ? 1 : 0);
+      const target = sorted[idx];
+      nameHistory[c] = (nameHistory[c]||[]).filter(e=> !(e.name===target.name && e.from===target.from));
+      if(nameHistory[c].length===0) delete nameHistory[c];
+      saveState();
+      renderNamesEditor();
+      const row2 = document.querySelector(`.name-hist-btn[data-code="${c}"]`);
+      if(row2) toggleNameHistoryPanel(c, row2.closest('.name-edit-row'));
+    };
+  });
+  const addBtn = panel.querySelector('.name-hist-add-btn');
+  addBtn.onclick = ()=>{
+    const nameInput = panel.querySelector('.name-hist-input-name');
+    const dateInput = panel.querySelector('.name-hist-input-date');
+    const name = nameInput.value.trim();
+    const from = dateInput.value;
+    if(!name || !from) return;
+    if(!nameHistory[code]) nameHistory[code] = [];
+    nameHistory[code].push({name, from});
+    saveState();
+    renderNamesEditor();
+    const row2 = document.querySelector(`.name-hist-btn[data-code="${code}"]`);
+    if(row2) toggleNameHistoryPanel(code, row2.closest('.name-edit-row'));
+  };
+}
+
 
 /* ============================================================
    CALENDRIER DE VACANCES — IMPORT EXCEL (glisser-déposer)
@@ -3521,15 +3648,23 @@ function populateDashYearSelect(){
   sel.innerHTML = years.map(y=>`<option value="${y}"${y===currentYear?' selected':''}>${y}</option>`).join('');
 }
 
+function emptyDashMetrics(){
+  return { conge:0, maladie:0, vac:0, remplacementsJ:0, remplacementsN:0, remplacements:0, surtempsAcceptes:0, surtempsRefuses:0, nonResolu:0 };
+}
+/* Ajoute une valeur aux stats "par personne" (clé = lettre + nom à la date de l'événement, via
+   nameForDate) — permet de distinguer 2 personnes différentes ayant occupé la même lettre à des
+   moments différents de l'année, plutôt que de tout mélanger sous la lettre seule. */
+function bumpPersonStat(byPerson, code, isoDate, field, amount){
+  const name = nameForDate(code, isoDate);
+  const key = code + ' — ' + name;
+  if(!byPerson[key]) byPerson[key] = {code, name, ...emptyDashMetrics()};
+  byPerson[key][field] += amount;
+}
+
 function computeYearStats(year){
   const stats = {};
-  EMPLOYEES.forEach(e=>{
-    stats[e.code] = {
-      conge:0, maladie:0, vac:0,
-      remplacementsJ:0, remplacementsN:0, remplacements:0,
-      surtempsAcceptes:0, surtempsRefuses:0, nonResolu:0
-    };
-  });
+  const byPerson = {};
+  EMPLOYEES.forEach(e=>{ stats[e.code] = emptyDashMetrics(); });
 
   const yearWeeks = WEEKS.filter(w=>w.start.getFullYear()===year);
 
@@ -3540,12 +3675,16 @@ function computeYearStats(year){
     EMPLOYEES.forEach(e=>{
       let hasVacThisWeek = false;
       w.days.forEach(day=>{
-        const t = vacDays.get(e.code+'|'+ymd(day.date));
-        if(t==='conge') stats[e.code].conge++;
-        else if(t==='maladie') stats[e.code].maladie++;
+        const iso = ymd(day.date);
+        const t = vacDays.get(e.code+'|'+iso);
+        if(t==='conge'){ stats[e.code].conge++; bumpPersonStat(byPerson, e.code, iso, 'conge', 1); }
+        else if(t==='maladie'){ stats[e.code].maladie++; bumpPersonStat(byPerson, e.code, iso, 'maladie', 1); }
         else if(t==='vac') hasVacThisWeek = true;
       });
-      if(hasVacThisWeek) stats[e.code].vac++;
+      if(hasVacThisWeek){
+        stats[e.code].vac++;
+        bumpPersonStat(byPerson, e.code, ymd(w.start), 'vac', 1);
+      }
     });
   });
 
@@ -3562,11 +3701,17 @@ function computeYearStats(year){
     runSimulation();
     if(simResult){
       simResult.forEach(a=>{
-        if(!a.coveredBy){ if(stats[a.who]) stats[a.who].nonResolu++; return; }
+        const iso = ymd(a.date);
+        if(!a.coveredBy){
+          if(stats[a.who]){ stats[a.who].nonResolu++; bumpPersonStat(byPerson, a.who, iso, 'nonResolu', 1); }
+          return;
+        }
         if(!stats[a.coveredBy]) return;
         stats[a.coveredBy].remplacements++;
-        if(a.shift==='j') stats[a.coveredBy].remplacementsJ++; else stats[a.coveredBy].remplacementsN++;
-        if(a.result.type==='ot') stats[a.coveredBy].surtempsAcceptes++;
+        bumpPersonStat(byPerson, a.coveredBy, iso, 'remplacements', 1);
+        if(a.shift==='j'){ stats[a.coveredBy].remplacementsJ++; bumpPersonStat(byPerson, a.coveredBy, iso, 'remplacementsJ', 1); }
+        else { stats[a.coveredBy].remplacementsN++; bumpPersonStat(byPerson, a.coveredBy, iso, 'remplacementsN', 1); }
+        if(a.result.type==='ot'){ stats[a.coveredBy].surtempsAcceptes++; bumpPersonStat(byPerson, a.coveredBy, iso, 'surtempsAcceptes', 1); }
       });
     }
   });
@@ -3579,7 +3724,10 @@ function computeYearStats(year){
     if(!dateStr.startsWith(String(year))) return;
     const conf = otConfirmations[shiftKey];
     if(conf && conf.refused){
-      conf.refused.forEach(code=>{ if(stats[code]) stats[code].surtempsRefuses++; });
+      conf.refused.forEach(code=>{
+        if(stats[code]) stats[code].surtempsRefuses++;
+        bumpPersonStat(byPerson, code, dateStr, 'surtempsRefuses', 1);
+      });
     }
   });
 
@@ -3588,13 +3736,15 @@ function computeYearStats(year){
   showReal = savedShowReal;
   refreshAll(); // restaure l'affichage normal de la semaine d'origine
 
-  return stats;
+  return {byLetter: stats, byPerson};
 }
 
 let dashCurrentStats = null;
+let dashCurrentByPerson = null;
 let dashCurrentYear = null;
 let dashSortKey = 'remplacementsJ';
 let dashSortAsc = false;
+let dashGrouping = 'letter'; // 'letter' | 'person'
 let dashView = 'table'; // 'table' | 'chart'
 let dashChartMetric = 'remplacementsJ';
 
@@ -3614,7 +3764,9 @@ function runDashGenerate(){
   const body = document.getElementById('dashBody');
   body.innerHTML = `<div class="dash-loading"><div class="dash-spinner"></div>Calcul de l'année ${year} en cours — recalcul de chaque semaine avec le moteur de comblement…</div>`;
   setTimeout(()=>{
-    dashCurrentStats = computeYearStats(year);
+    const result = computeYearStats(year);
+    dashCurrentStats = result.byLetter;
+    dashCurrentByPerson = result.byPerson;
     dashCurrentYear = year;
     renderDashboard();
   }, 30); // laisse le temps au spinner de s'afficher avant le calcul (synchrone, potentiellement long)
@@ -3622,6 +3774,17 @@ function runDashGenerate(){
 
 function dashTotal(stats, key){
   return EMPLOYEES.reduce((sum,e)=>sum + stats[e.code][key], 0);
+}
+
+/* Lignes à afficher (tableau/graphique) selon le regroupement choisi :
+   - "letter" : une ligne par lettre A-J (nom affiché = nom ACTUEL, comportement historique).
+   - "person" : une ligne par PERSONNE distincte ayant occupé une lettre pendant l'année (une
+     même lettre peut donc apparaître plusieurs fois si elle a changé de titulaire). */
+function getDashRows(){
+  if(dashGrouping === 'person'){
+    return Object.values(dashCurrentByPerson || {});
+  }
+  return EMPLOYEES.map(e=>({code:e.code, name:displayName(e.code), ...dashCurrentStats[e.code]}));
 }
 
 function renderDashboard(){
@@ -3653,15 +3816,19 @@ function renderDashboard(){
   html += `<div class="dash-view-toggle">
     <button class="dash-view-btn${dashView==='table'?' active':''}" data-dashview="table">📋 Tableau</button>
     <button class="dash-view-btn${dashView==='chart'?' active':''}" data-dashview="chart">📈 Graphique</button>
+    <span style="width:14px;"></span>
+    <button class="dash-view-btn${dashGrouping==='letter'?' active':''}" data-dashgroup="letter">🔤 Par lettre</button>
+    <button class="dash-view-btn${dashGrouping==='person'?' active':''}" data-dashgroup="person">🧑 Par lettre + personne</button>
   </div>`;
 
+  const rows = getDashRows();
   if(dashView==='table'){
-    html += buildDashTableHTML(stats);
+    html += buildDashTableHTML(rows);
   } else {
-    html += buildDashChartHTML(stats);
+    html += buildDashChartHTML(rows);
   }
 
-  html += `<p class="dash-caveat">Congés/maladies/vacances reflètent exactement ce qui a été entré dans l'outil. Remplacements et surtemps ne couvrent que les semaines où une vacance a été simulée cette année — une semaine jamais ouverte dans l'outil n'apparaît pas ici. "Non résolu" = quart resté sans volontaire ni renfort de jour (liste d'appel du secteur).</p>`;
+  html += `<p class="dash-caveat">Congés/maladies/vacances reflètent exactement ce qui a été entré dans l'outil. Remplacements et surtemps ne couvrent que les semaines où une vacance a été simulée cette année — une semaine jamais ouverte dans l'outil n'apparaît pas ici. "Non résolu" = quart resté sans volontaire ni renfort de jour (liste d'appel du secteur).${dashGrouping==='person'?' Vue « par personne » : basée sur l’historique renseigné dans le panneau Noms des employés (🕐) — sans historique enregistré, chaque lettre est attribuée au nom actuellement affiché pour toute l’année.':''}</p>`;
 
   body.innerHTML = html;
   wireDashInteractions();
@@ -3673,9 +3840,8 @@ function renderDashboard(){
   });
 }
 
-function buildDashTableHTML(stats){
-  const rows = EMPLOYEES.map(e=>({code:e.code, name:displayName(e.code), role:e.role, ...stats[e.code]}));
-  rows.sort((a,b)=>{
+function buildDashTableHTML(rows){
+  rows = rows.slice().sort((a,b)=>{
     const diff = (a[dashSortKey] - b[dashSortKey]) * (dashSortAsc ? 1 : -1);
     return diff !== 0 ? diff : a.code.localeCompare(b.code);
   });
@@ -3689,7 +3855,7 @@ function buildDashTableHTML(stats){
     {key:'nonResolu', label:'Non résolu'}
   ];
   let html = `<table class="dash-table"><thead><tr>
-    <th data-sortkey="code">Employé</th>
+    <th data-sortkey="code">${dashGrouping==='person'?'Lettre — personne':'Employé'}</th>
     ${cols.map(c=>`<th data-sortkey="${c.key}" class="${dashSortKey===c.key?'sorted'+(dashSortAsc?' asc':''):''}">${c.label}</th>`).join('')}
   </tr></thead><tbody>`;
   rows.forEach(r=>{
@@ -3705,10 +3871,9 @@ function buildDashTableHTML(stats){
   return html;
 }
 
-function buildDashChartHTML(stats){
+function buildDashChartHTML(rows){
   const metric = DASH_METRICS.find(m=>m.key===dashChartMetric);
-  const rows = EMPLOYEES.map(e=>({code:e.code, name:displayName(e.code), val:stats[e.code][dashChartMetric]}));
-  rows.sort((a,b)=> b.val - a.val);
+  rows = rows.map(r=>({code:r.code, name:r.name, val:r[dashChartMetric]})).sort((a,b)=> b.val - a.val);
   const max = Math.max(1, ...rows.map(r=>r.val));
   let html = `<div class="dash-chart-wrap">
     <select class="dash-metric-select" id="dashMetricSelect">
@@ -3728,6 +3893,9 @@ function buildDashChartHTML(stats){
 function wireDashInteractions(){
   document.querySelectorAll('[data-dashview]').forEach(btn=>{
     btn.onclick = ()=>{ dashView = btn.dataset.dashview; renderDashboard(); };
+  });
+  document.querySelectorAll('[data-dashgroup]').forEach(btn=>{
+    btn.onclick = ()=>{ dashGrouping = btn.dataset.dashgroup; renderDashboard(); };
   });
   document.querySelectorAll('.dash-table th[data-sortkey]').forEach(th=>{
     th.onclick = ()=>{
