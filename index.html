@@ -1821,6 +1821,48 @@ function computeCell(empCode, dayIdx){
   }
   return computeCellBase(empCode, dayIdx);
 }
+/* Détermine, parmi les jours JO officiels (horaire maître) d'un réserviste E/F/G encore non
+   utilisés pour du comblement cette semaine, lesquels restent réellement "disponibles" compte
+   tenu de son quota hebdomadaire déjà entamé — et LESQUELS précisément, en priorisant les jours
+   CONSÉCUTIFS à ceux déjà travaillés (Procédure — Gestion des relèves, pt. 9), pas un choix
+   arbitraire. Résultat mis en cache le temps du rendu courant (une entrée par code, invalidée à
+   chaque nouvelle simulation via la clé simResult elle-même).
+   Exemple : Lapierre est appelé hors-horaire lundi+mardi pour combler Bruneau ; son horaire maître
+   Jo lui donne normalement 3 jours (mer./jeu./ven.) mais son quota total (3) est déjà entamé par
+   ces 2 jours empruntés — il ne lui reste qu'1 jour de disponibilité réelle, et comme la procédure
+   priorise la continuité, c'est mercredi (collé à mardi) qui reste affiché "JO disponible", pas
+   jeudi ni vendredi. */
+const _keptJoDaysCache = new Map();
+function getKeptJoDays(empCode, w){
+  const week = w || WEEKS[weekIndex];
+  const cacheKey = empCode + '|' + ymd(week.start) + '|' + (simResult ? simResult.length : 0);
+  if(_keptJoDaysCache.has(cacheKey)) return _keptJoDaysCache.get(cacheKey);
+
+  const quota = joQuotaFor(empCode, week);
+  const usedCount = simResult ? simResult.filter(a=>a.coveredBy===empCode).length : 0;
+  const remaining = Math.max(0, quota - usedCount);
+
+  const candidates = [];
+  const workingDays = [];
+  for(let i=0;i<7;i++){
+    const coveredHere = simResult && simResult.some(a=>a.coveredBy===empCode && a.dayIdx===i);
+    if(coveredHere){ workingDays.push(i); continue; }
+    const base = baseCellStatus(empCode, i);
+    if(base.cls==='jo') candidates.push(i);
+    else if(base.cls==='j' || base.cls==='n') workingDays.push(i);
+  }
+
+  let kept;
+  if(remaining >= candidates.length){
+    kept = new Set(candidates); // quota suffisant : tous ses jours JO officiels restent disponibles
+  } else {
+    const distanceToWork = (day)=> workingDays.length ? Math.min(...workingDays.map(d=>Math.abs(d-day))) : 99;
+    const sorted = [...candidates].sort((a,b)=> distanceToWork(a)-distanceToWork(b) || a-b);
+    kept = new Set(sorted.slice(0, remaining));
+  }
+  _keptJoDaysCache.set(cacheKey, kept);
+  return kept;
+}
 function computeCellBase(empCode, dayIdx){
   const w = WEEKS[weekIndex];
   const day = w.days[dayIdx];
@@ -1855,14 +1897,17 @@ function computeCellBase(empCode, dayIdx){
       else label = `Jo — comble ${coverAssignment.who}`;
       return {cls, hours, tag: label};
     }
-    // 2) Ce Jo (E/F/G) a déjà épuisé tout son quota hebdomadaire ailleurs cette semaine-là (ex.
-    //    en empruntant des jours hors-JO) : ses jours JO officiels non utilisés n'ont plus de
-    //    disponibilité réelle à offrir — affichage vide plutôt que "JO disponible" trompeur.
+    // 2) Ce Jo (E/F/G) a un quota hebdomadaire limité (joQuotaFor) — s'il a déjà été appelé cette
+    //    semaine (comblement, même hors de son horaire JO habituel), les jours restants qui
+    //    dépassent son quota n'ont plus de disponibilité réelle à offrir. Procédure — Gestion des
+    //    relèves, pt. 9 : priorité aux journées CONSÉCUTIVES — donc parmi ses jours JO officiels
+    //    encore non utilisés, on garde en priorité ceux collés à un jour déjà travaillé cette
+    //    semaine (son propre horaire ou un comblement), pas n'importe lesquels.
     if(['E','F','G'].includes(empCode)){
-      const usedCount = simResult.filter(a=>a.coveredBy===empCode).length;
-      if(usedCount >= joQuotaFor(empCode, w)){
-        const base = baseCellStatus(empCode, dayIdx);
-        if(base.cls==='jo') return {cls:'off', hours:'—', tag:null};
+      const base = baseCellStatus(empCode, dayIdx);
+      if(base.cls==='jo'){
+        const kept = getKeptJoDays(empCode, w);
+        if(!kept.has(dayIdx)) return {cls:'off', hours:'—', tag:null};
       }
     }
   }
@@ -2570,6 +2615,7 @@ function renderChips(){
    MOTEUR DE COMBLEMENT
 ============================================================ */
 function runSimulation(){
+  _keptJoDaysCache.clear(); // toute nouvelle simulation invalide le cache de disponibilité JO restante
   const w = WEEKS[weekIndex];
   const vac = vacatingCodesThisWeek(w);
   const resultBox = document.getElementById('resultBox');
