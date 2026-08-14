@@ -1363,45 +1363,56 @@ function vacType(code, dayIdx, w){
 
 /* ============================================================
    ÉCHANGES MANUELS ENTRE 2 EMPLOYÉS DIFFÉRENTS — N'IMPORTE OÙ DANS LA GRILLE DE LA SEMAINE
-   "les employés veulent parfois échanger des relèves pour accommoder leur horaire" — ex. un J de
-   Beaudette (lundi) contre un J de Roy (jeudi), ou un J contre un N, peu importe le jour de chacun,
-   tant que c'est la même semaine affichée. Aucune règle de la convention n'est appliquée
-   (ancienneté, etc.) — échange brut du contenu de 2 cases, tel que demandé. SEULE exception : la
-   règle des 12h consécutives max (24h sans repos si on enchaîne nuit puis jour le lendemain matin)
-   reste vérifiée — voir swapWouldViolate24h() plus bas.
-   Activable seulement une fois qu'une simulation existe pour la semaine (simResult non nul) —
-   après ce moment-là, le comblement/surtemps est déjà déterminé et l'échange n'est qu'une
-   question de qui se présente physiquement. Persiste comme les vacances (par date réelle, donc
-   ça fonctionne même sur une semaine déjà gelée/publiée).
-   Structure : chaque case est identifiée par "code|YYYY-MM-DD". manualSwaps associe la clé d'une
-   case à la clé de son unique partenaire d'échange, dans les 2 sens (relation symétrique) — une
-   case ne peut être engagée que dans un seul échange à la fois.
+   "les employés veulent parfois échanger des relèves pour accommoder leur horaire" — ex. Desrochers
+   glisse SON jeudi sur le samedi de Roy : Desrochers se retrouve à travailler samedi (avec SON
+   propre quart, déplacé) et son jeudi original devient vide (il l'a cédé) ; Roy, de son côté, se
+   retrouve à travailler jeudi (avec SON propre quart, déplacé) et son samedi original devient vide.
+   Chaque quart RESTE celui de sa personne d'origine — un échange déplace le jour de travail de
+   chacun vers le jour de l'autre, ce n'est PAS un échange de contenu entre 2 cases fixes.
+   Aucune règle de la convention n'est appliquée (ancienneté, etc.) — tel que demandé. SEULES
+   exceptions : (1) la règle des 12h consécutives max (24h sans repos si on enchaîne nuit puis jour
+   le lendemain matin) reste vérifiée, et (2) une relève de surtemps ne peut jamais être échangée.
+   Activable seulement une fois qu'une simulation existe pour la semaine (simResult non nul).
+   Persiste comme les vacances (par date réelle, donc ça fonctionne même sur une semaine déjà
+   gelée/publiée).
+   Structure : liste d'échanges actifs {codeA, isoA, codeB, isoB} — isoA est le jour d'ORIGINE de
+   codeA (maintenant vide pour lui, et où codeB apparaît désormais), isoB est le jour d'origine de
+   codeB (maintenant vide pour lui, et où codeA apparaît désormais).
 ============================================================ */
-let manualSwaps = new Map();
-function cellKey(code, iso){ return code+'|'+iso; }
-function getSwapPartnerCell(code, dayIdx, w){
-  const week = w || WEEKS[weekIndex];
-  const iso = ymd(week.days[dayIdx].date);
-  const partnerKey = manualSwaps.get(cellKey(code, iso));
-  if(!partnerKey) return null;
-  const sep = partnerKey.lastIndexOf('|');
-  return {code: partnerKey.slice(0,sep), iso: partnerKey.slice(sep+1)};
+let manualSwaps = [];
+/* Cherche si (code, iso) est impliqué dans un échange actif, et retourne son rôle :
+   - 'origin' : ce jour-là était le jour d'origine de "code" — son quart est parti ailleurs, case
+     vide désormais.
+   - 'destination' : "code" travaille maintenant ce jour-là — case vide à l'origine, occupée par le
+     quart de "code" déplacé depuis son propre jour d'origine (ownOtherIso). */
+function lookupSwap(code, iso){
+  for(const s of manualSwaps){
+    if(s.codeA===code){
+      if(s.isoA===iso) return {role:'origin', ownOtherIso:s.isoB, partnerCode:s.codeB, partnerIso:s.isoB};
+      if(s.isoB===iso) return {role:'destination', ownOtherIso:s.isoA, partnerCode:s.codeB, partnerIso:s.isoB};
+    }
+    if(s.codeB===code){
+      if(s.isoB===iso) return {role:'origin', ownOtherIso:s.isoA, partnerCode:s.codeA, partnerIso:s.isoA};
+      if(s.isoA===iso) return {role:'destination', ownOtherIso:s.isoB, partnerCode:s.codeA, partnerIso:s.isoA};
+    }
+  }
+  return null;
 }
 function addSwap(codeA, dayIdxA, codeB, dayIdxB, w){
   const week = w || WEEKS[weekIndex];
   const isoA = ymd(week.days[dayIdxA].date);
   const isoB = ymd(week.days[dayIdxB].date);
-  manualSwaps.set(cellKey(codeA,isoA), cellKey(codeB,isoB));
-  manualSwaps.set(cellKey(codeB,isoB), cellKey(codeA,isoA));
+  manualSwaps.push({codeA, isoA, codeB, isoB});
 }
 function removeSwapAt(code, dayIdx, w){
   const week = w || WEEKS[weekIndex];
   const iso = ymd(week.days[dayIdx].date);
-  const key = cellKey(code, iso);
-  const partnerKey = manualSwaps.get(key);
-  if(!partnerKey) return false;
-  manualSwaps.delete(key);
-  manualSwaps.delete(partnerKey);
+  const idx = manualSwaps.findIndex(s =>
+    (s.codeA===code && (s.isoA===iso || s.isoB===iso)) ||
+    (s.codeB===code && (s.isoA===iso || s.isoB===iso))
+  );
+  if(idx<0) return false;
+  manualSwaps.splice(idx,1);
   return true;
 }
 /* Type de quart travaillé ('j'/'n') d'une cellule calculée, ou null si ce n'est pas un quart
@@ -1420,52 +1431,52 @@ function cellShiftType(cls){
 function isOvertimeCls(cls){
   return (cls || '').split(' ').includes('ot-flag');
 }
-/* Un échange est refusé s'il ferait travailler l'une des 2 personnes plus de 12h consécutives
-   sans repos — c'est-à-dire créerait un enchaînement quart de nuit puis quart de jour le
-   lendemain matin (aucun repos entre les deux), en tenant compte du quart RÉEL de la veille et du
-   lendemain (déjà affecté par un comblement/surtemps/échange précédent, pas seulement l'horaire
-   maître statique). Chaque personne n'a qu'UNE seule case qui change (la sienne), peu importe le
-   jour de l'autre côté de l'échange — donc on vérifie chaque personne indépendamment, autour de
-   SON jour à elle. Réutilise shiftsAdjacent(), la même définition que pour le surtemps. */
+/* Un échange est refusé s'il ferait travailler l'une des 2 personnes plus de 12h consécutives sans
+   repos. Après l'échange, codeX travaille désormais à dayIdxY (avec SON propre contenu d'origine,
+   celui qu'il avait à dayIdxX) et codeY travaille désormais à dayIdxX (avec SON propre contenu
+   d'origine, celui qu'il avait à dayIdxY) — on vérifie donc l'adjacence autour du NOUVEAU jour de
+   travail de chacun, en ignorant l'ancien jour (dayToIgnore) puisqu'il devient vide (aucun risque
+   de fatigue depuis une case désormais vide). Réutilise shiftsAdjacent(), comme pour le surtemps. */
 function swapWouldViolate24h(codeX, dayIdxX, codeY, dayIdxY, w){
   const week = w || WEEKS[weekIndex];
-  const cellX = computeCell(codeX, dayIdxX); // AVANT échange
-  const cellY = computeCell(codeY, dayIdxY);
-  const newShiftForX = cellShiftType(cellY.cls); // codeX recevrait l'ancien contenu de codeY, sur SON jour dayIdxX
-  const newShiftForY = cellShiftType(cellX.cls); // codeY recevrait l'ancien contenu de codeX, sur SON jour dayIdxY
-  function wouldViolate(code, dayIdx, newShift){
-    if(!newShift) return false; // pas un quart travaillé après échange : aucun risque de 24h
-    if(dayIdx>0){
-      const prevType = cellShiftType(computeCell(code, dayIdx-1).cls);
-      if(prevType && shiftsAdjacent(dayIdx-1, prevType, dayIdx, newShift)) return true;
+  const cellXOwn = computeCellBase(codeX, dayIdxX); // contenu propre de X, avant échange
+  const cellYOwn = computeCellBase(codeY, dayIdxY); // contenu propre de Y, avant échange
+  const newShiftForXAtY = cellShiftType(cellXOwn.cls); // X aura CE contenu, désormais affiché à dayIdxY
+  const newShiftForYAtX = cellShiftType(cellYOwn.cls); // Y aura CE contenu, désormais affiché à dayIdxX
+  function wouldViolate(code, newDayIdx, newShift, dayToIgnore){
+    if(!newShift) return false;
+    if(newDayIdx>0 && (newDayIdx-1)!==dayToIgnore){
+      const prevType = cellShiftType(computeCell(code, newDayIdx-1).cls);
+      if(prevType && shiftsAdjacent(newDayIdx-1, prevType, newDayIdx, newShift)) return true;
     }
-    if(dayIdx<6){
-      const nextType = cellShiftType(computeCell(code, dayIdx+1).cls);
-      if(nextType && shiftsAdjacent(dayIdx, newShift, dayIdx+1, nextType)) return true;
+    if(newDayIdx<6 && (newDayIdx+1)!==dayToIgnore){
+      const nextType = cellShiftType(computeCell(code, newDayIdx+1).cls);
+      if(nextType && shiftsAdjacent(newDayIdx, newShift, newDayIdx+1, nextType)) return true;
     }
     return false;
   }
-  return wouldViolate(codeX, dayIdxX, newShiftForX) || wouldViolate(codeY, dayIdxY, newShiftForY);
+  return wouldViolate(codeX, dayIdxY, newShiftForXAtY, dayIdxX) || wouldViolate(codeY, dayIdxX, newShiftForYAtX, dayIdxY);
 }
 /* Tente un échange entre la case (codeX, dayIdxX) et la case (codeY, dayIdxY) — n'importe où dans
-   la grille de la semaine affichée, même jour ou non, même quart (J/N) ou non. Si c'est déjà la
-   paire échangée en place, ça défait l'échange (annulation en re-sélectionnant les 2 mêmes cases).
-   Si l'une des 2 cases fait déjà partie d'un AUTRE échange, refusé — il faut d'abord l'annuler.
-   Règles appliquées à l'échange (demandées explicitement, tout le reste — ancienneté, etc. — est
-   ignoré) : (1) jamais plus de 12h consécutives sans repos pour l'une des 2 personnes, et
-   (2) une relève de surtemps ne peut jamais être échangée. */
+   la grille de la semaine affichée. Si c'est déjà la paire échangée en place, ça défait l'échange
+   (annulation en re-sélectionnant les 2 mêmes cases). Si l'une des 2 cases fait déjà partie d'un
+   AUTRE échange, refusé — il faut d'abord l'annuler.
+   Règles appliquées (demandées explicitement, tout le reste — ancienneté, etc. — est ignoré) :
+   (1) jamais plus de 12h consécutives sans repos pour l'une des 2 personnes, et (2) une relève de
+   surtemps ne peut jamais être échangée. */
 function attemptSwap(codeX, dayIdxX, codeY, dayIdxY, w){
   const week = w || WEEKS[weekIndex];
   if(codeX === codeY) return {ok:false, msg:"On ne peut échanger qu'entre 2 employés différents."};
-  const partnerOfX = getSwapPartnerCell(codeX, dayIdxX, week);
-  const partnerOfY = getSwapPartnerCell(codeY, dayIdxY, week);
-  const isoY = ymd(week.days[dayIdxY].date), isoX = ymd(week.days[dayIdxX].date);
-  if(partnerOfX && partnerOfX.code===codeY && partnerOfX.iso===isoY &&
-     partnerOfY && partnerOfY.code===codeX && partnerOfY.iso===isoX){
-    removeSwapAt(codeX, dayIdxX, week);
+  const isoX = ymd(week.days[dayIdxX].date), isoY = ymd(week.days[dayIdxY].date);
+  const existingIdx = manualSwaps.findIndex(s =>
+    (s.codeA===codeX && s.isoA===isoX && s.codeB===codeY && s.isoB===isoY) ||
+    (s.codeA===codeY && s.isoA===isoY && s.codeB===codeX && s.isoB===isoX)
+  );
+  if(existingIdx>=0){
+    manualSwaps.splice(existingIdx,1);
     return {ok:true, undone:true};
   }
-  if(partnerOfX || partnerOfY){
+  if(lookupSwap(codeX, isoX) || lookupSwap(codeY, isoY)){
     return {ok:false, msg:"Une des deux cases fait déjà partie d'un échange — touche ses 2 cases échangées pour l'annuler d'abord."};
   }
   const cellXraw = computeCell(codeX, dayIdxX);
@@ -1735,21 +1746,36 @@ const REAL_WEEK_KNOWN_CODES = new Set(
 );
 
 /* Enveloppe de computeCellBase qui applique un échange manuel s'il y en a un pour cet employé ce
-   jour-là — retourne alors le contenu RÉEL du partenaire d'échange, PEU IMPORTE le jour où se
-   trouve le partenaire dans la semaine (jamais re-redirigé, on appelle toujours computeCellBase
-   pour le partenaire afin d'éviter toute récursion). Désactivé sur la semaine réelle publiée
-   (isReal) — cette vue est une référence de validation figée, non éditable, comme le reste des
-   interactions de la grille. */
+   jour-là. Un échange DÉPLACE le jour de travail de chacun vers le jour de l'autre (le quart reste
+   celui de sa personne d'origine) :
+   - rôle "origin" (le jour d'origine, cédé) → case vide (l'employé ne travaille plus ce jour-là).
+   - rôle "destination" (le jour pris à l'autre) → affiche le contenu PROPRE de cet employé, celui
+     qu'il avait à son propre jour d'origine (jamais re-redirigé vers le partenaire, on appelle
+     toujours computeCellBase pour éviter toute récursion).
+   Désactivé sur la semaine réelle publiée (isReal) — référence de validation figée, non éditable,
+   comme le reste des interactions de la grille. */
 function computeCell(empCode, dayIdx){
   const w = WEEKS[weekIndex];
   const isReal = showReal && ymd(w.start) === REAL_WEEK_START;
   if(!isReal){
-    const partner = getSwapPartnerCell(empCode, dayIdx, w);
-    if(partner){
-      const partnerDayIdx = w.days.findIndex(d => ymd(d.date) === partner.iso);
-      if(partnerDayIdx >= 0){
-        const base = computeCellBase(partner.code, partnerDayIdx);
-        return {...base, swapped:true, swapPartner:partner.code, swapPartnerDayIdx:partnerDayIdx};
+    const iso = ymd(w.days[dayIdx].date);
+    const info = lookupSwap(empCode, iso);
+    if(info){
+      if(info.role === 'origin'){
+        return {
+          cls:'off', hours:'—', tag:'', badge:null,
+          swapped:true, swapEmptied:true, swapPartner:info.partnerCode,
+          swapPartnerDayIdx: w.days.findIndex(d => ymd(d.date) === info.partnerIso)
+        };
+      }
+      const ownDayIdx = w.days.findIndex(d => ymd(d.date) === info.ownOtherIso);
+      if(ownDayIdx >= 0){
+        const base = computeCellBase(empCode, ownDayIdx);
+        return {
+          ...base, swapped:true, swapPartner:info.partnerCode,
+          swapPartnerDayIdx: w.days.findIndex(d => ymd(d.date) === info.partnerIso),
+          swapFromDayIdx: ownDayIdx
+        };
       }
     }
   }
@@ -1891,7 +1917,10 @@ function buildScheduleHTML(w, isReal, interactive){
       const t = truncTag(c.tag, 15);
       const tagHtml = c.tag ? `<span class="tag">${t.short}</span>` : '';
       const badgeHtml = c.badge ? `<span class="orig-badge orig-badge-${c.badge}">${c.badge.toUpperCase()}</span>` : '';
-      const swapDotHtml = c.swapped ? `<span class="swap-dot" data-swap-remove="1" title="Échangé avec ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]}) — toucher pour annuler l'échange">🔄</span>` : '';
+      const swapTooltip = c.swapEmptied
+        ? `Quart cédé à ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]}) — toucher pour annuler l'échange`
+        : `Quart déplacé ici suite à l'échange avec ${displayName(c.swapPartner)} (${DAY_LABELS[c.swapPartnerDayIdx]}) — toucher pour annuler l'échange`;
+      const swapDotHtml = c.swapped ? `<span class="swap-dot" data-swap-remove="1" title="${swapTooltip}">🔄</span>` : '';
       cells += `<td class="shift-cell${canToggle?' toggle-vac':''}${c.swapped?' is-swapped':''}" data-code="${emp.code}" data-day="${i}"${canToggle?' title="Cliquer pour faire le cycle : normal → congé → maladie → normal"':''}><span class="shift ${c.cls}">${badgeHtml}${swapDotHtml}${c.hours}${tagHtml}</span></td>`;
     });
     bodyHTML += `<tr>${cells}</tr>`;
