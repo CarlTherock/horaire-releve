@@ -2527,10 +2527,15 @@ function toggleVacDay(code, dayIdx, w, type){
   saveState();
 }
 
-/* Un jour est "prenable en congé" pour cet employé seulement s'il y travaille réellement cette
-   semaine-là (quart ABCDG pour A-D-G, ou statut non-repos de l'horaire maître Jo pour E-F) —
-   cet ensemble de jours change chaque semaine, au même titre que la rotation elle-même. */
+/* Un jour est "prenable en congé" pour cet employé s'il y travaille réellement cette semaine-là —
+   soit selon son horaire maître statique (quart ABCDG pour A-D-G, statut non-repos de l'horaire
+   maître Jo pour E-F), SOIT parce qu'une simulation en cours l'a assigné à combler quelqu'un
+   d'autre ce jour-là (même hors de son horaire maître habituel, ex. Lapierre appelé un lundi qui
+   n'est normalement pas son jour JO) — sinon on ne pourrait jamais demander congé/maladie sur un
+   quart pourtant bien réel et travaillé cette semaine-là, ce qui bloquerait la cascade vers la
+   lettre suivante (E→F→G) en cas d'imprévu sur ce quart de remplacement lui-même. */
 function worksThisDay(code, dayIdx, w){
+  if(simResult && simResult.some(a=>a.coveredBy===code && a.dayIdx===dayIdx)) return true;
   const day = w.days[dayIdx];
   if(code==='G'){
     if(day.j==='G' || day.n==='G') return true;
