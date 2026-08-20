@@ -3178,6 +3178,27 @@ function renderOtConfirmPanel(assignments, w){
 
   const wasHidden = panel.style.display==='none' || panel.style.display==='';
   panel.style.display = 'block';
+
+  /* Candidat actif GLOBAL pour tout le panneau (pas un curseur indépendant par quart) : on ne peut
+     jamais offrir un quart à un candidat plus jeune tant qu'un candidat plus ancien a encore au
+     moins un quart en attente (peu importe lequel) dans ce groupe de surtemps. On parcourt
+     l'ancienneté une fois pour tout le panneau ; le premier qui a encore un quart éligible non
+     résolu (ni accepté, ni refusé par lui) devient LE candidat actif — ses boutons apparaissent sur
+     tous les quarts où il est éligible, personne d'autre n'a de bouton tant qu'il n'a pas répondu à
+     tout ce qu'il pouvait prendre. */
+  let activeCandidate = null;
+  for(const c of seniorityOrder){
+    const hasOpenShift = otShifts.some(u=>{
+      if(u.result.type!=='ot') return false; // gap/reg déjà résolus autrement (renfort de jour, liste d'appel)
+      const shiftKey = ymd(u.date)+':'+u.shift;
+      const conf = otConfirmations[shiftKey] || {refused:new Set(), accepted:null};
+      if(conf.accepted) return false;
+      if(conf.refused.has(c)) return false;
+      return otCandidateEligible(c, u.dayIdx, u.shift, w, assignments);
+    });
+    if(hasOpenShift){ activeCandidate = c; break; }
+  }
+
   let html = `<div class="ot-confirm-box"><h3>📋 Confirmation du surtemps — offert par ancienneté (non obligatoire)</h3>`;
   otShifts.forEach(u=>{
     const shiftKey = ymd(u.date)+':'+u.shift;
@@ -3192,12 +3213,12 @@ function renderOtConfirmPanel(assignments, w){
     else if(wentToEq) noteHtml = ` <span style="color:var(--ot);">— refusé par tous, passé au renfort de jour (${u.coveredBy})</span>`;
     html += `<div class="ot-shift-block">
       <div class="ot-shift-title"><b>${dayLabel} · ${shiftLabel}</b> — rang ${u.rank} (${RANK_LABELS[u.rank]}) — remplace ${u.who}${noteHtml}</div>`;
-    let resolved = false;
     candidates.forEach((c,idx)=>{
       const isAccepted = conf.accepted===c;
       const isRefused = conf.refused.has(c);
-      const isCurrent = !conf.accepted && !isRefused && !resolved;
-      if(isCurrent) resolved = true; // le prochain non-refusé après celui-ci est "en attente"
+      // Actionnable seulement si c'est LE candidat actif global (ancienneté strictement respectée
+      // à travers tout le panneau, pas seulement la position dans la liste de ce quart précis).
+      const isCurrent = !conf.accepted && !isRefused && c===activeCandidate;
       // Une fois quelqu'un accepté, on masque les candidats jamais sollicités (non refusés, non
       // acceptés) pour alléger l'affichage — seuls le candidat accepté et l'historique des refus restent.
       if(conf.accepted && !isAccepted && !isRefused) return;
