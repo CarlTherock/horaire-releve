@@ -3122,11 +3122,26 @@ function runSimulation(){
     // max 2 en surtemps (pires quarts), reste = employé de jour à temps régulier.
     const passSpecial = assignJoPass(uncovered);
     assignments.push(...passSpecial.assigned);
-    // Classement des quarts restants par rang (pires quarts) — les 2 moins pires en surtemps
+    // Classement des quarts restants par rang (pires quarts d'abord exclus, moins pires prioritaires
+    // pour le surtemps) puis par jour — sert seulement à décider qui a la priorité si plus de 2
+    // quarts finissent acceptés en même temps ; TOUS restent éligibles à la cascade d'ancienneté,
+    // rien n'est écarté d'office (cas réel : Bruneau doit pouvoir encore prendre lundi si personne
+    // avant lui ne l'a pris, même une fois rendu au 3e candidat).
     let stillOpen = passSpecial.stillOpen;
-    stillOpen.sort((a,b)=>a.rank-b.rank);
-    stillOpen.forEach((u,idx)=>{
-      if(idx<2){
+    stillOpen.sort((a,b)=>a.rank-b.rank || a.dayIdx-b.dayIdx);
+    // Plafond de 2 quarts en surtemps pour tout le groupe (art. 8.01 pt.9 / politique employeur) —
+    // compté sur les acceptations RÉELLES seulement (otConfirmations), jamais sur des offres encore
+    // en attente : tant que le plafond n'est pas atteint, chaque quart reste offert par ancienneté
+    // (cascade complète, pas seulement les 2 premiers de la liste). Dès que 2 sont confirmés, tout
+    // quart restant bascule directement à l'employé de jour sans autre offre de surtemps.
+    const acceptedCount = stillOpen.filter(u=>{
+      const key = ymd(u.date)+':'+u.shift;
+      return otConfirmations[key] && otConfirmations[key].accepted;
+    }).length;
+    stillOpen.forEach(u=>{
+      const key = ymd(u.date)+':'+u.shift;
+      const alreadyAccepted = otConfirmations[key] && otConfirmations[key].accepted;
+      if(alreadyAccepted || acceptedCount<2){
         assignments.push(resolveOt(u));
       } else {
         const eq = tryEqReleve(u);
