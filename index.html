@@ -3374,17 +3374,33 @@ function renderLadder(activeShifts){
 /* ============================================================
    COMPTEUR DE JO DISPONIBLES (bien visible)
 ============================================================ */
+/* Compte de JO réels d'une semaine, purement dérivé du cycle maître (REAL_JO_DEFAULT) — jamais
+   affecté par les sélections courantes du simulateur (congé/maladie/vacances cochés à l'écran).
+   Le seul moment où ce chiffre change est un changement de semaine, jamais un clic dans le
+   simulateur. Repli à 4/lettre pour une semaine hors table source (même repli que joQuotaFor). */
+function weekJoCountStatic(w){
+  const weekJo = REAL_JO_DEFAULT[ymd(w.start)];
+  if(!weekJo) return {E:4, F:4, G:4};
+  const cnt = code => [...weekJo[code]].filter(c=>c==='o').length;
+  return {E:cnt('E'), F:cnt('F'), G:cnt('G')};
+}
 function renderJoStat(){
   const w = WEEKS[weekIndex];
   const useReal = showReal && ymd(w.start)===REAL_WEEK_START;
-  let countE=0, countF=0, countG=0;
-  w.days.forEach((day,i)=>{
-    // Hors semaine "réelle publiée", on utilise le statut de base (sans la simulation en cours)
-    // pour que ce total reste le même chiffre que "JO disponibles" dans le panneau de résultats.
-    if((useReal ? computeCell('E',i) : baseCellStatus('E',i)).cls==='jo') countE++;
-    if((useReal ? computeCell('F',i) : baseCellStatus('F',i)).cls==='jo') countF++;
-    if((useReal ? computeCell('G',i) : baseCellStatus('G',i)).cls==='jo') countG++;
-  });
+  let countE, countF, countG;
+  if(useReal){
+    countE=0; countF=0; countG=0;
+    w.days.forEach((day,i)=>{
+      if(computeCell('E',i).cls==='jo') countE++;
+      if(computeCell('F',i).cls==='jo') countF++;
+      if(computeCell('G',i).cls==='jo') countG++;
+    });
+  } else {
+    // Statistique fixe de la semaine (horaire maître Jo réel) — ignore volontairement toute
+    // sélection en cours dans le simulateur (congé/maladie/vacances cochés à l'écran).
+    const c = weekJoCountStatic(w);
+    countE = c.E; countF = c.F; countG = c.G;
+  }
   const total = countE + countF + countG;
   const hasRealData = !!REAL_JO_DEFAULT[ymd(w.start)];
   document.getElementById('joStatNum').textContent = total;
