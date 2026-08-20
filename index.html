@@ -2996,6 +2996,53 @@ function runSimulation(){
     return {code:c||null, borrowed: c ? !isOwnJoDay(c,dayIdx) : false};
   }
 
+  /* Passe de comblement Jo sur une liste de quarts non couverts (déjà enrichis d'un .rank).
+     L'ordre E→F→G reste TOUJOURS strict — cette fonction ne change jamais qui obtient un quart,
+     seulement l'ORDRE dans lequel les quarts de MÊME rang sont tentés. Sans ça, le quota limité
+     d'un Jo (ex. F) se fait grignoter par le premier quart venu du même rang (souvent le plus tôt
+     dans la semaine), et un quart plus tard qui aurait pu prolonger le bloc déjà en cours de ce Jo
+     (procédure pt. 9 — journées consécutives) finit sans Jo disponible et bascule en surtemps chez
+     quelqu'un d'autre, fragmentant inutilement l'horaire (cas réel : Lachance aurait dû recevoir le
+     jeudi pour former jeu-ven-sam(congé) plutôt que de laisser ce trou aller au surtemps). */
+  function assignJoPass(items){
+    const assigned = [];
+    const stillOpen = [];
+    const tiers = new Map();
+    items.forEach(u=>{
+      if(!tiers.has(u.rank)) tiers.set(u.rank, []);
+      tiers.get(u.rank).push(u);
+    });
+    const sortedRanks = [...tiers.keys()].sort((a,b)=>b-a); // pire rang d'abord, entre tiers : ordre strict inchangé
+    sortedRanks.forEach(rank=>{
+      let pool = tiers.get(rank);
+      while(pool.length){
+        // À égalité de rang seulement : priorise le quart qui prolongerait un bloc déjà entamé par
+        // le Jo qui le recevrait de toute façon selon l'ordre E→F→G strict (jour calendrier adjacent
+        // déjà occupé par ce même Jo) — sinon, ordre chronologique par défaut.
+        let best = pool[0], bestScore = -1;
+        pool.forEach(u=>{
+          const winner = joOrder.find(c=>joAvailable(c,u.dayIdx,u.shift));
+          let score = 0;
+          if(winner){
+            for(const k of occupiedSlots[winner]){
+              const d = parseInt(k.split(':')[0],10);
+              if(Math.abs(d-u.dayIdx)===1){ score = 1; break; }
+            }
+          }
+          if(score>bestScore || (score===bestScore && u.dayIdx<best.dayIdx)){ best=u; bestScore=score; }
+        });
+        pool = pool.filter(x=>x!==best);
+        const {code:jo, borrowed} = findJo(best.dayIdx, best.shift);
+        if(jo){
+          assigned.push({...best, coveredBy: jo, result:{type:'jo', label: borrowed ? `Jo ${jo} — assignation régulière (hors horaire JO habituel)` : `Jo ${jo} — assignation régulière`}});
+        } else {
+          stillOpen.push(best);
+        }
+      }
+    });
+    return {assigned, stillOpen};
+  }
+
   if(uncovered.length===0){
     // Seuls des réservistes (E/F) sont en vacances : aucun quart de rotation touché,
     // mais le bassin de Jo disponibles est réduit d'autant.
@@ -3058,16 +3105,9 @@ function runSimulation(){
     // Si aucun Jo n'est disponible (ex. maladie réduisant le bassin de JO), le quart bascule en
     // surtemps par ANCIENNETÉ (échelle des pires quarts) plutôt qu'en liste d'appel — une pénurie
     // de JO crée du surtemps, ce n'est pas automatiquement un trou non comblé.
-    let stillOpenSimple = [];
-    uncovered.forEach(u=>{
-      const {code:jo, borrowed} = findJo(u.dayIdx, u.shift);
-      if(jo){
-        assignments.push({...u, coveredBy: jo, result:{type:'jo', label: borrowed ? `Jo ${jo} — assignation régulière (hors horaire JO habituel)` : `Jo ${jo} — assignation régulière`}});
-      } else {
-        stillOpenSimple.push(u);
-      }
-    });
-    stillOpenSimple = stillOpenSimple.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
+    const passSimple = assignJoPass(uncovered);
+    assignments.push(...passSimple.assigned);
+    let stillOpenSimple = passSimple.stillOpen;
     stillOpenSimple.sort((a,b)=>b.rank-a.rank || a.dayIdx-b.dayIdx);
     stillOpenSimple.forEach(u=>{
       assignments.push(resolveOt(u, 'pénurie de JO'));
@@ -3076,17 +3116,10 @@ function runSimulation(){
     // Règle spéciale : 2 employés de relève (A à G, pas seulement A-D) simultanément en vacances,
     // typiquement durant la période estivale → jusqu'à 4 quarts non couverts,
     // max 2 en surtemps (pires quarts), reste = employé de jour à temps régulier.
-    let stillOpen = [];
-    uncovered.forEach(u=>{
-      const {code:jo, borrowed} = findJo(u.dayIdx, u.shift);
-      if(jo){
-        assignments.push({...u, coveredBy: jo, result:{type:'jo', label: borrowed ? `Jo ${jo} — assignation régulière (hors horaire JO habituel)` : `Jo ${jo} — assignation régulière`}});
-      } else {
-        stillOpen.push(u);
-      }
-    });
+    const passSpecial = assignJoPass(uncovered);
+    assignments.push(...passSpecial.assigned);
     // Classement des quarts restants par rang (pires quarts) — les 2 moins pires en surtemps
-    stillOpen = stillOpen.map(u=>({...u, rank: shiftRank(u.date, u.shift==='n')}));
+    let stillOpen = passSpecial.stillOpen;
     stillOpen.sort((a,b)=>a.rank-b.rank);
     stillOpen.forEach((u,idx)=>{
       if(idx<2){
