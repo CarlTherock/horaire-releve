@@ -305,12 +305,6 @@ header{
   padding:5px 11px;display:flex;align-items:center;gap:6px;
 }
 .jo-stat-breakdown .jo-pill b{color:var(--jo);font-family:'Oswald',sans-serif;font-size:13px;}
-/* Info de semaine statique dans la bande mauve — texte seulement, non interactif */
-.jo-stat-weekinfo{
-  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);
-  border-left:1px solid rgba(154,139,240,0.35);padding-left:14px;flex:none;
-}
-.jo-stat-weekinfo b{color:var(--text);font-family:'Oswald',sans-serif;font-size:12.5px;}
 /* Bouton "Voir le comblement" — scrolle vers et surligne les 3 rectangles de résultats */
 .jo-stat-jump-btn{
   font-family:'Oswald',sans-serif;font-size:12.5px;font-weight:500;
@@ -983,7 +977,6 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
       <div class="jo-stat-label">JO disponibles cette semaine</div>
       <div class="jo-stat-sub" id="joStatSub">Réservistes E · F · G</div>
     </div>
-    <div class="jo-stat-weekinfo" id="joStatWeekInfo">—</div>
     <button class="jo-stat-jump-btn" id="jumpToSimBtn">📊 Voir le comblement</button>
     <div class="jo-stat-breakdown" id="joStatBreakdown"></div>
   </div>
@@ -3406,14 +3399,6 @@ function renderJoStat(){
   document.getElementById('joStatSub').textContent = sub;
   document.getElementById('joStatBreakdown').innerHTML =
     `<span class="jo-pill">E — <b>${countE}</b> j.</span><span class="jo-pill">F — <b>${countF}</b> j.</span><span class="jo-pill">G — <b>${countG}</b> j.</span>`;
-  // Info de semaine statique — dates + SEM#, juste de l'affichage, ne dépend d'aucun calcul de
-  // comblement ni de simulation en cours.
-  const weekInfoEl = document.getElementById('joStatWeekInfo');
-  if(weekInfoEl){
-    const startStr = fmtDate(w.start,{day:'2-digit',month:'short'});
-    const endStr = fmtDate(w.days[6].date,{day:'2-digit',month:'short'});
-    weekInfoEl.innerHTML = `<b>${startStr} – ${endStr}</b><br>SEM ${isoWeekNumber(w.start)}`;
-  }
 }
 
 function renderSummary(){
@@ -3500,7 +3485,7 @@ document.getElementById('jumpToSimBtn').onclick = ()=>{
   const statsBox = resultBox.querySelector('.sim-stats');
   if(statsBox){
     statsBox.classList.add('sim-stats-highlight');
-    setTimeout(()=> statsBox.classList.remove('sim-stats-highlight'), 2200);
+    setTimeout(()=> statsBox.classList.remove('sim-stats-highlight'), 5000);
   }
 };
 document.getElementById('runSim').onclick = runSimulation;
