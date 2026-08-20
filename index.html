@@ -3396,6 +3396,7 @@ document.getElementById('resetWeekSim').onclick = ()=>{
   Array.from(vacDays.keys()).forEach(key=>{ if(weekDates.has(key.split('|')[1])) vacDays.delete(key); });
   Array.from(unavailableJo).forEach(key=>{ if(weekDates.has(key.split('|')[1])) unavailableJo.delete(key); });
   Object.keys(otConfirmations).forEach(key=>{ if(weekDates.has(key.split(':')[0])) delete otConfirmations[key]; });
+  manualSwaps = manualSwaps.filter(s => !weekDates.has(s.isoA) && !weekDates.has(s.isoB));
   simResult = null;
   document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
   const panel = document.getElementById('otConfirmPanel');
@@ -3403,7 +3404,7 @@ document.getElementById('resetWeekSim').onclick = ()=>{
   refreshAll();
 };
 document.getElementById('resetAllSim').onclick = ()=>{
-  vacDays=new Map(); unavailableJo=new Set(); simResult=null; otConfirmations={};
+  vacDays=new Map(); unavailableJo=new Set(); simResult=null; otConfirmations={}; manualSwaps=[];
   document.getElementById('resultBox').innerHTML='<div class="placeholder">Sélectionnez un ou deux titulaires en vacances, puis lancez la simulation.</div>';
   const panel = document.getElementById('otConfirmPanel');
   panel.style.display = 'none'; panel.innerHTML = '';
