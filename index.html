@@ -1074,7 +1074,6 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
       <div class="brand">
         <img class="brand-mark" src="./icon-192-v3.png" alt="" width="46" height="46">
         <div class="brand-text">
-          <div class="eyebrow">Entretien — Mécanique / Électro-instrumentation</div>
           <h1>Simulateur d'horaire de Relève Windsor</h1>
           <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
         </div>
@@ -1584,7 +1583,7 @@ function loadTeamProfile(code){
 }
 function saveTeamProfile(code, profile){
   try{ localStorage.setItem(profileKeyFor(code), JSON.stringify(profile)); }catch(e){}
-  pushTeamProfileToCloud(code, profile);
+  return pushTeamProfileToCloud(code, profile);
 }
 /* Pousse le profil (noms + dates d'ancienneté) vers Supabase — best-effort,
    ne bloque jamais l'app si hors ligne ou si le SDK n'a pas pu se charger. */
@@ -1695,14 +1694,11 @@ function openProfileScreenFor(code){
   const rows = document.getElementById('profileRows');
   rows.innerHTML = EMPLOYEES.map(emp=>{
     const name = (existing.names && existing.names[emp.code]) || '';
-    const hasDate = ['A','B','C','D','E','F','G'].includes(emp.code);
     const date = (existing.seniorityDates && existing.seniorityDates[emp.code]) || '';
     return `<div class="profile-row">
       <div class="pletter">${emp.code}</div>
       <input type="text" data-code="${emp.code}" data-field="name" placeholder="Nom, Prénom" value="${name.replace(/"/g,'&quot;')}">
-      ${hasDate
-        ? `<input type="date" data-code="${emp.code}" data-field="date" value="${date}">`
-        : `<div class="pnodate">renfort de jour</div>`}
+      <input type="date" data-code="${emp.code}" data-field="date" value="${date}">
     </div>`;
   }).join('');
 }
@@ -1711,8 +1707,10 @@ document.getElementById('profileBackBtn').onclick = ()=>{
   document.documentElement.classList.add('needTeam');
   renderTeamSelectScreen();
 };
-document.getElementById('profileForm').addEventListener('submit', (e)=>{
+document.getElementById('profileForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = 'Enregistrement…'; }
   const code = profileScreenTeam;
   const names = {};
   const dates = {};
@@ -1722,11 +1720,13 @@ document.getElementById('profileForm').addEventListener('submit', (e)=>{
   document.querySelectorAll('#profileRows input[data-field="date"]').forEach(inp=>{
     if(inp.value) dates[inp.dataset.code] = inp.value;
   });
-  saveTeamProfile(code, {names, seniorityDates: dates, confirmed:true});
+  const profilePush = saveTeamProfile(code, {names, seniorityDates: dates, confirmed:true});
 
   // Fusionne dans l'état sauvegardé de l'équipe (créé s'il n'existe pas encore) — à CHAQUE
   // confirmation du profil, pas juste la première fois. Ordre d'ancienneté recalculé
   // automatiquement depuis les dates saisies (départage : ordre alphabétique de la lettre).
+  // Seules les lettres A-G entrent dans la cascade d'ancienneté (H/I/J = renfort de jour, hors
+  // cascade) — même si une date est saisie pour H/I/J, elle sert au suivi seulement.
   const stateKey = LEGACY_STATE_KEY + '__' + code;
   let existing = {};
   try{ const raw = localStorage.getItem(stateKey); if(raw) existing = JSON.parse(raw); }catch(err){}
@@ -1743,7 +1743,8 @@ document.getElementById('profileForm').addEventListener('submit', (e)=>{
       if(!already) nameHist[c].push({name: names[c], from: todayIso});
     }
   });
-  let order = Object.keys(dates).filter(c=>dates[c]);
+  const SENIORITY_CASCADE_CODES = ['A','B','C','D','E','F','G'];
+  let order = Object.keys(dates).filter(c=>dates[c] && SENIORITY_CASCADE_CODES.includes(c));
   order.sort((a,b)=> dates[a]!==dates[b] ? (dates[a]<dates[b]?-1:1) : a.localeCompare(b));
   if(order.length===0) order = (existing.seniorityOrder && existing.seniorityOrder.length ? existing.seniorityOrder : ['D','G','A','B','C','F','E']).filter(c=>EMPLOYEES.some(e=>e.code===c));
   const merged = Object.assign({}, existing, {
@@ -1753,7 +1754,15 @@ document.getElementById('profileForm').addEventListener('submit', (e)=>{
     nameHistory: nameHist
   });
   try{ localStorage.setItem(stateKey, JSON.stringify(merged)); }catch(err){}
-  if(sb){ try{ sb.from('team_states').upsert({ team_code: code, state: merged }); }catch(err){} }
+
+  // Important : on ATTEND la confirmation d'écriture cloud (avec un délai maximum de 4s pour ne
+  // jamais bloquer indéfiniment si le réseau est lent/absent) AVANT de recharger la page — sinon
+  // le rechargement pouvait déclencher la synchro cloud entrante avant que l'écriture sortante
+  // n'ait fini, et écraser les noms/dates qu'on vient tout juste de saisir par une version cloud
+  // pas encore à jour. C'est ce qui causait les dates « qui ne restaient pas ».
+  const cloudWrite = sb ? sb.from('team_states').upsert({ team_code: code, state: merged }).then(()=>{}).catch(()=>{}) : Promise.resolve();
+  const timeout = new Promise(resolve=>setTimeout(resolve, 4000));
+  await Promise.all([Promise.race([cloudWrite, timeout]), Promise.race([profilePush || Promise.resolve(), timeout])]);
 
   setActiveTeam(code);
   location.reload();
@@ -2325,7 +2334,7 @@ function loadState(){
 }
 function applyLoadedState(s){
   try{
-    if(s.seniorityDates && typeof s.seniorityDates==='object') seniorityDates = s.seniorityDates;
+    if(s.seniorityDates && typeof s.seniorityDates==='object') seniorityDates = Object.assign({}, seniorityDates, s.seniorityDates);
     if(s.weekStart){
       const idx = WEEKS.findIndex(w=>ymd(w.start)===s.weekStart);
       if(idx>=0) weekIndex = idx;
@@ -2334,7 +2343,7 @@ function applyLoadedState(s){
     if(typeof s.filterWorkersOnly==='boolean') filterWorkersOnly = s.filterWorkersOnly;
     if(Number.isInteger(s.currentDayIdx) && s.currentDayIdx>=0 && s.currentDayIdx<=6) currentDayIdx = s.currentDayIdx;
     if(s.realNames && typeof s.realNames==='object'){
-      REAL_NAMES = s.realNames;
+      REAL_NAMES = Object.assign({}, REAL_NAMES, s.realNames);
     }
     if(s.nameHistory && typeof s.nameHistory==='object'){
       nameHistory = s.nameHistory;
