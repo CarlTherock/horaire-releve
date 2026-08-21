@@ -1009,13 +1009,14 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <div id="lockScreen">
   <div class="lock-box">
     <img src="./icon-192-v3.png" alt="" width="52" height="52">
     <h2>Simulateur d'horaire — Relève Windsor</h2>
     <p>Accès protégé — entrer les identifiants</p>
     <form id="lockForm" autocomplete="off">
-      <input type="text" id="lockUser" placeholder="Utilisateur" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input type="email" id="lockUser" placeholder="Courriel" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
       <input type="password" id="lockPass" placeholder="Mot de passe" autocomplete="current-password">
       <button type="submit">Déverrouiller</button>
       <div class="lock-error" id="lockError"></div>
@@ -1067,6 +1068,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
     <div class="header-right">
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="team-badge" id="teamBadge">—</span>
+        <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
         <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
         <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
       </div>
@@ -1263,12 +1265,24 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
    Déverrouillage mémorisé par appareil/navigateur (localStorage) — pas de session partagée entre
    appareils, et "Déconnexion" ne reverrouille que l'appareil sur lequel on clique.
 ============================================================ */
-const LOCK_USER = "admin";
-const LOCK_PASS_SHA256 = "b2e7ad5f510f85ea0f3b5c18f69a0c3b45d3f3aad0591fddfab3bab55a81df47";
-async function sha256Hex(str){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
+/* ============================================================
+   SÉCURITÉ D'ACCÈS — Supabase Auth (remplace l'ancien mot de passe local
+   SHA-256 le 21 août 2026, voir la discussion Supabase pour le contexte).
+   Le mot de passe n'est plus vérifié côté client : c'est le serveur Supabase
+   qui valide l'identité, et les policies RLS des tables cloud (team_profiles,
+   team_states) exigent une session authentifiée. localStorage.horaireUnlocked
+   sert seulement de cache local pour éviter un flash de l'écran de mot de
+   passe au chargement — la vraie source de vérité est la session Supabase.
+============================================================ */
+const SUPABASE_URL = 'https://atkunsjbyowcpddrfsre.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_jQWUnZf4AUqt-5gjZgpcqQ__o2Ksc_6';
+let sb = null;
+try{
+  if(typeof supabase !== 'undefined' && supabase.createClient){
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+}catch(e){ console.warn('Supabase SDK indisponible — l\'app fonctionnera en mode local seulement.', e); }
+
 function isUnlocked(){ return localStorage.getItem('horaireUnlocked') === '1'; }
 function doUnlock(){
   localStorage.setItem('horaireUnlocked','1');
@@ -1286,28 +1300,57 @@ function doUnlock(){
     return;
   }
   applyActiveTeamTheme();
+  syncStateFromCloud();
 }
-function doLock(){
+async function doLock(){
   localStorage.removeItem('horaireUnlocked');
   document.documentElement.classList.add('locked');
   document.getElementById('lockPass').value = '';
   document.getElementById('lockUser').value = '';
   document.getElementById('lockError').textContent = '';
+  if(sb){ try{ await sb.auth.signOut(); }catch(e){} }
 }
 document.getElementById('lockForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
-  const user = document.getElementById('lockUser').value.trim();
+  const email = document.getElementById('lockUser').value.trim();
   const pass = document.getElementById('lockPass').value;
   const errEl = document.getElementById('lockError');
-  const hash = await sha256Hex(pass);
-  if(user === LOCK_USER && hash === LOCK_PASS_SHA256){
-    doUnlock();
-  }else{
-    errEl.textContent = 'Utilisateur ou mot de passe incorrect.';
+  if(!sb){
+    errEl.textContent = "Connexion au service d'authentification indisponible (hors ligne ou bloqué). Réessaie avec une connexion Internet.";
+    return;
+  }
+  errEl.textContent = 'Connexion en cours…';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if(error || !data.session){
+    errEl.textContent = 'Courriel ou mot de passe incorrect.';
     document.getElementById('lockPass').value = '';
+  }else{
+    errEl.textContent = '';
+    doUnlock();
   }
 });
 document.getElementById('logoutBtn').onclick = doLock;
+
+/* Au chargement : si le SDK Supabase est là, on vérifie la vraie session
+   (persistée par le SDK lui-même) — au cas où horaireUnlocked serait
+   périmé (session expirée ailleurs) ou au contraire déjà valide sur un
+   nouvel appareil sans qu'on ait retapé le mot de passe. */
+if(sb){
+  sb.auth.onAuthStateChange((event, session)=>{
+    if(event === 'SIGNED_OUT' && isUnlocked()){
+      localStorage.removeItem('horaireUnlocked');
+      document.documentElement.classList.add('locked');
+    }
+  });
+  sb.auth.getSession().then(({data})=>{
+    if(data.session && !isUnlocked()){
+      doUnlock();
+    }else if(!data.session && isUnlocked()){
+      localStorage.removeItem('horaireUnlocked');
+      document.documentElement.classList.add('locked');
+    }
+  }).catch(()=>{});
+}
 
 /* ============================================================
    DONNÉES — Horaire maître ABCDG (source : 2026_ABCDG.pdf)
@@ -1526,6 +1569,34 @@ function loadTeamProfile(code){
 }
 function saveTeamProfile(code, profile){
   try{ localStorage.setItem(profileKeyFor(code), JSON.stringify(profile)); }catch(e){}
+  pushTeamProfileToCloud(code, profile);
+}
+/* Pousse le profil (noms + dates d'ancienneté) vers Supabase — best-effort,
+   ne bloque jamais l'app si hors ligne ou si le SDK n'a pas pu se charger. */
+async function pushTeamProfileToCloud(code, profile){
+  if(!sb) { setSyncBadge('offline'); return; }
+  setSyncBadge('pending');
+  try{
+    const { error } = await sb.from('team_profiles').upsert({
+      team_code: code,
+      names: profile.names || {},
+      seniority_dates: profile.seniorityDates || {},
+      confirmed: !!profile.confirmed
+    });
+    setSyncBadge(error ? 'error' : 'synced');
+  }catch(e){ setSyncBadge('error'); }
+}
+/* Va chercher le profil sur Supabase (utile sur un nouvel appareil qui n'a
+   pas encore de cache local pour cette équipe) — fusionne dans le cache local. */
+async function pullTeamProfileFromCloud(code){
+  if(!sb) return null;
+  try{
+    const { data, error } = await sb.from('team_profiles').select('names,seniority_dates,confirmed').eq('team_code', code).maybeSingle();
+    if(error || !data) return null;
+    const profile = { names: data.names||{}, seniorityDates: data.seniority_dates||{}, confirmed: !!data.confirmed };
+    localStorage.setItem(profileKeyFor(code), JSON.stringify(profile));
+    return profile;
+  }catch(e){ return null; }
 }
 
 /* Migration ponctuelle : si aucune équipe active n'est encore choisie sur cet appareil mais que
@@ -2112,31 +2183,97 @@ let currentDayIdx = 0;
    semaine et vue courantes. Reste sur cet appareil/navigateur seulement ;
    silencieux si le stockage est indisponible (navigation privée, quota plein).
 ============================================================ */
+function buildStatePayload(){
+  const otConfSerializable = {};
+  Object.keys(otConfirmations).forEach(k=>{
+    otConfSerializable[k] = {refused: Array.from(otConfirmations[k].refused), accepted: otConfirmations[k].accepted};
+  });
+  return {
+    weekStart: ymd(WEEKS[weekIndex].start),
+    showReal, filterWorkersOnly, currentDayIdx, seniorityOrder, seniorityDates,
+    vacDays: Array.from(vacDays.entries()),
+    manualSwaps: manualSwaps,
+    unavailableJo: Array.from(unavailableJo),
+    otConfirmations: otConfSerializable,
+    realNames: REAL_NAMES,
+    nameHistory,
+    vacImportHistory,
+    importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])]))
+  };
+}
 function saveState(){
   try{
-    const otConfSerializable = {};
-    Object.keys(otConfirmations).forEach(k=>{
-      otConfSerializable[k] = {refused: Array.from(otConfirmations[k].refused), accepted: otConfirmations[k].accepted};
-    });
-    localStorage.setItem(currentStorageKey(), JSON.stringify({
-      weekStart: ymd(WEEKS[weekIndex].start),
-      showReal, filterWorkersOnly, currentDayIdx, seniorityOrder, seniorityDates,
-      vacDays: Array.from(vacDays.entries()),
-      manualSwaps: manualSwaps,
-      unavailableJo: Array.from(unavailableJo),
-      otConfirmations: otConfSerializable,
-      realNames: REAL_NAMES,
-      nameHistory,
-      vacImportHistory,
-      importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])]))
-    }));
+    const payload = buildStatePayload();
+    localStorage.setItem(currentStorageKey(), JSON.stringify(payload));
+    pushStateToCloud(payload);
   }catch(e){}
 }
+/* Pousse l'état complet (vacances, surtemps, semaine courante, etc.) vers
+   Supabase — cache local (localStorage) toujours écrit en premier et reste
+   la source qui fait fonctionner l'app hors ligne; le cloud sert de
+   sauvegarde/synchro entre appareils, pas de dépendance bloquante. */
+let __pushDebounceTimer = null;
+function pushStateToCloud(payload){
+  if(!sb){ setSyncBadge('offline'); return; }
+  setSyncBadge('pending');
+  clearTimeout(__pushDebounceTimer);
+  __pushDebounceTimer = setTimeout(async ()=>{
+    try{
+      const { error } = await sb.from('team_states').upsert({
+        team_code: getActiveTeam(),
+        state: payload
+      });
+      setSyncBadge(error ? 'error' : 'synced');
+    }catch(e){ setSyncBadge('error'); }
+  }, 600); // petit debounce — évite un appel réseau à chaque frappe/case cochée
+}
+/* Va chercher l'état cloud le plus récent pour l'équipe active et l'applique
+   par-dessus l'état local déjà rendu (appelé après le premier rendu local,
+   pour ne jamais bloquer l'ouverture de l'app pendant l'appel réseau). */
+async function syncStateFromCloud(){
+  if(!sb) { setSyncBadge('offline'); return; }
+  setSyncBadge('pending');
+  try{
+    const { data, error } = await sb.from('team_states').select('state').eq('team_code', getActiveTeam()).maybeSingle();
+    if(error){ setSyncBadge('error'); return; }
+    if(data && data.state){
+      applyLoadedState(data.state);
+      localStorage.setItem(currentStorageKey(), JSON.stringify(data.state));
+      refreshAll();
+    }
+    setSyncBadge('synced');
+  }catch(e){ setSyncBadge('error'); }
+}
+function setSyncBadge(status){
+  const el = document.getElementById('syncBadge');
+  if(!el) return;
+  if(!navigator.onLine){
+    el.textContent = '📴 Hors réseau (cache local)';
+    el.style.background = 'var(--panel-3)'; el.style.color = 'var(--text-dim)';
+    return;
+  }
+  const map = {
+    synced:  ['☁️ Synchronisé', 'var(--jour)', '#fff'],
+    pending: ['⏳ Synchro…', 'var(--panel-3)', 'var(--text-dim)'],
+    offline: ['📴 Hors ligne (cache local)', 'var(--panel-3)', 'var(--text-dim)'],
+    error:   ['⚠️ Échec de synchro', 'var(--alert)', '#fff'],
+  };
+  const [label, bg, fg] = map[status] || map.pending;
+  el.textContent = label; el.style.background = bg; el.style.color = fg;
+}
+window.addEventListener('online', ()=>{ setSyncBadge('pending'); if(isUnlocked() && getActiveTeam()) syncStateFromCloud(); });
+window.addEventListener('offline', ()=>{ setSyncBadge('offline'); });
+
 function loadState(){
   try{
     const raw = localStorage.getItem(currentStorageKey());
     if(!raw) return;
     const s = JSON.parse(raw);
+    applyLoadedState(s);
+  }catch(e){}
+}
+function applyLoadedState(s){
+  try{
     if(s.seniorityDates && typeof s.seniorityDates==='object') seniorityDates = s.seniorityDates;
     if(s.weekStart){
       const idx = WEEKS.findIndex(w=>ymd(w.start)===s.weekStart);
@@ -2190,6 +2327,11 @@ if(isUnlocked()){
   }
 }
 loadState();
+if(isUnlocked() && getActiveTeam()){
+  const __bp = loadTeamProfile(getActiveTeam());
+  if(__bp && __bp.confirmed) syncStateFromCloud();
+}
+setSyncBadge(navigator.onLine ? (sb ? 'pending' : 'offline') : 'offline');
 
 function todayDayIdxInWeek(){
   const w = WEEKS[weekIndex];
