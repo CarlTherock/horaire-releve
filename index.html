@@ -175,6 +175,7 @@ html.needProfile #profileScreen{
   display:inline-flex;align-items:center;gap:6px;
 }
 .header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+.header-right-group{display:flex;align-items:center;gap:16px;}
 .logout-btn{
   font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.04em;
   background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim);
@@ -1079,17 +1080,20 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
           <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
         </div>
       </div>
-      <div class="header-right">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="team-badge" id="teamBadge">—</span>
-          <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
-          <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
-          <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
+      <div class="header-right-group">
+        <div class="header-right">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="team-badge" id="teamBadge">—</span>
+            <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
+            <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
+            <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
+          </div>
+          <div class="header-meta">
+          Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
+          Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
+          </div>
         </div>
-        <div class="header-meta">
-        Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
-        Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
-        </div>
+        <img class="brand-mark" id="brandMarkRight" src="./icon-192-v3.png" alt="" width="160" height="160">
       </div>
     </div>
   </header>
@@ -1785,6 +1789,8 @@ function applyActiveTeamTheme(){
   if(badge) badge.textContent = t.name;
   const mark = document.getElementById('brandMark');
   if(mark) mark.src = t.logo || './icon-192-v3.png';
+  const markRight = document.getElementById('brandMarkRight');
+  if(markRight) markRight.src = t.logo || './icon-192-v3.png';
 }
 
 /* ============================================================
