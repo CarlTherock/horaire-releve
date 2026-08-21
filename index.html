@@ -63,10 +63,10 @@
 html.locked body > .wrap{display:none !important;}
 #lockScreen{display:none;}
 html.locked #lockScreen{
-  display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:flex-start;justify-content:center;
   position:fixed;inset:0;z-index:9999;
   background:radial-gradient(circle at 30% 20%, #1a2230 0%, #0e131a 70%);
-  padding:20px;overflow-y:auto;
+  padding:40px 20px;overflow-y:auto;
 }
 .lock-box{
   width:100%;max-width:690px;
@@ -112,10 +112,10 @@ html.needTeam body > .wrap{display:none !important;}
 html.needTeam #lockScreen{display:none !important;}
 #teamSelectScreen{display:none;}
 html.needTeam #teamSelectScreen{
-  display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:flex-start;justify-content:center;
   position:fixed;inset:0;z-index:9999;
   background:radial-gradient(circle at 30% 20%, #1a2230 0%, #0e131a 70%);
-  padding:20px;overflow-y:auto;
+  padding:40px 20px;overflow-y:auto;
 }
 .team-box{
   width:100%;max-width:480px;
@@ -143,10 +143,10 @@ html.needProfile body > .wrap{display:none !important;}
 html.needProfile #lockScreen{display:none !important;}
 #profileScreen{display:none;}
 html.needProfile #profileScreen{
-  display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:flex-start;justify-content:center;
   position:fixed;inset:0;z-index:9999;
   background:radial-gradient(circle at 30% 20%, #1a2230 0%, #0e131a 70%);
-  padding:20px;overflow-y:auto;
+  padding:40px 20px;overflow-y:auto;
 }
 .profile-box{
   width:100%;max-width:640px;margin:20px 0;
