@@ -118,25 +118,25 @@ html.needTeam #teamSelectScreen{
   padding:40px 20px;overflow-y:auto;
 }
 .team-box{
-  width:100%;max-width:760px;
+  width:100%;max-width:1100px;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
   text-align:center;
 }
 .team-box h2{font-family:'Oswald',sans-serif;font-weight:600;font-size:18px;color:var(--text);margin:0 0 6px;}
 .team-box p{font-size:12.5px;color:var(--text-dim);margin:0 0 22px;}
-.team-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:12px;}
+.team-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;}
 .team-choice-btn{
-  display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;
-  background:var(--panel-2);border:1px solid var(--line);border-left:6px solid var(--tc-accent,var(--jour));
+  display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;box-sizing:border-box;
+  background:var(--panel-2);border:1px solid var(--line);border-top:5px solid var(--tc-accent,var(--jour));
   border-radius:9px;color:var(--text);font-family:'Oswald',sans-serif;font-weight:500;
-  font-size:15px;padding:13px 16px;cursor:pointer;transition:.15s;text-align:left;
+  font-size:14px;padding:16px 10px;cursor:pointer;transition:.15s;text-align:center;
 }
-.team-choice-btn:hover{filter:brightness(1.15);transform:translateX(2px);}
+.team-choice-btn:hover{filter:brightness(1.15);transform:translateY(-2px);}
 .team-choice-btn .tswatch{width:14px;height:14px;border-radius:50%;flex:none;background:var(--tc-accent,var(--jour));}
-.team-choice-btn .tswatch-logo{width:112px;height:112px;border-radius:50%;flex:none;object-fit:cover;border:1px solid rgba(255,255,255,0.15);}
-.team-choice-btn .tname{flex:1;}
-.team-choice-btn .tsub{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-weight:400;}
+.team-choice-btn .tswatch-logo{width:72px;height:72px;border-radius:50%;flex:none;object-fit:cover;border:1px solid rgba(255,255,255,0.15);}
+.team-choice-btn .tname{flex:none;line-height:1.25;}
+.team-choice-btn .tsub{font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-weight:400;min-height:12px;}
 
 /* ===== ÉCRAN PROFILS D'ÉQUIPE (noms + ancienneté) ===== */
 html.needProfile body > .wrap{display:none !important;}
@@ -290,6 +290,10 @@ body{
   .brand-text-center h1{font-size:20px;}
   .brand-mark{width:132px;height:132px;}
   .header-meta{text-align:left;font-size:10.5px;width:100%;}
+  .team-choice-btn{flex-direction:row;text-align:left;padding:12px 14px;gap:12px;border-top:none;border-left:6px solid var(--tc-accent,var(--jour));}
+  .team-choice-btn .tswatch-logo{width:56px;height:56px;}
+  .team-choice-btn .tname{flex:1;}
+  .team-choice-btn .tsub{font-size:11px;min-height:0;}
   .control-bar{padding:12px;gap:10px;}
   .week-nav{width:100%;justify-content:space-between;}
   .week-label{min-width:0;flex:1;font-size:14.5px;}
@@ -1069,7 +1073,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 </div>
 <div id="profileScreen">
   <div class="profile-box">
-    <img id="profileTeamLogo" src="./icon-app-main.png" alt="" width="96" height="96" style="border-radius:14px;display:block;margin:0 auto 14px;">
+    <img id="profileTeamLogo" src="./icon-app-main.png" alt="" width="144" height="144" style="border-radius:14px;display:block;margin:0 auto 14px;">
     <h2 id="profileTeamTitle">Confirmer les employés</h2>
     <p>Nom et date d'ancienneté de métier pour chaque lettre — modifiable ici, et plus tard dans l'outil.</p>
     <form id="profileForm">
