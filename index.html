@@ -309,13 +309,6 @@ header{
   padding-bottom:20px;
   margin-bottom:22px;
 }
-.header-frame{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-end;
-  flex-wrap:wrap;
-  gap:18px;
-}
 .brand-mark{
   width:160px;height:160px;border-radius:20px;
   flex:none;display:block;object-fit:cover;
@@ -352,6 +345,8 @@ header{
    même recette visuelle que .control-bar (barre de semaine) ci-dessus,
    mais plus prononcé pour bien ressortir juste au-dessus de la ligne d'accent. ===== */
 .header-frame{
+  display:flex;
+  flex-direction:column;
   background:linear-gradient(160deg, rgba(var(--tc-accent-rgb,139,58,46),0.34), rgba(14,19,26,0.90)), var(--panel);
   border:1px solid rgba(var(--tc-accent-rgb,139,58,46),0.55);
   border-radius:var(--radius);
