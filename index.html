@@ -300,14 +300,16 @@ body{
 
 /* ===== HEADER ===== */
 header{
+  border-bottom:3px solid var(--tc-accent,var(--line));
+  padding-bottom:20px;
+  margin-bottom:22px;
+}
+.header-frame{
   display:flex;
   justify-content:space-between;
   align-items:flex-end;
   flex-wrap:wrap;
   gap:18px;
-  border-bottom:3px solid var(--tc-accent,var(--line));
-  padding-bottom:20px;
-  margin-bottom:22px;
 }
 .brand{display:flex;align-items:center;gap:14px;}
 .brand-mark{
@@ -342,15 +344,15 @@ header{
   box-shadow:0 0 24px -10px rgba(61,139,255,0.35);
 }
 
-/* ===== ENCADREMENT DU TITRE (entête) — dégradé teinté selon la couleur d'équipe,
-   même recette visuelle que .control-bar (barre de semaine) ci-dessus. ===== */
-.brand-frame{
-  display:flex;align-items:center;gap:14px;
-  background:linear-gradient(160deg, rgba(var(--tc-accent-rgb,139,58,46),0.16), rgba(14,19,26,0.92)), var(--panel);
-  border:1px solid rgba(var(--tc-accent-rgb,139,58,46),0.4);
+/* ===== ENCADREMENT DE L'ENTÊTE — dégradé teinté selon la couleur d'équipe,
+   même recette visuelle que .control-bar (barre de semaine) ci-dessus,
+   mais plus prononcé pour bien ressortir juste au-dessus de la ligne d'accent. ===== */
+.header-frame{
+  background:linear-gradient(160deg, rgba(var(--tc-accent-rgb,139,58,46),0.34), rgba(14,19,26,0.90)), var(--panel);
+  border:1px solid rgba(var(--tc-accent-rgb,139,58,46),0.55);
   border-radius:var(--radius);
-  padding:12px 20px;
-  box-shadow:0 0 24px -10px rgba(var(--tc-accent-rgb,139,58,46),0.35);
+  padding:14px 20px;
+  box-shadow:0 0 28px -8px rgba(var(--tc-accent-rgb,139,58,46),0.45);
 }
 .week-nav{display:flex;align-items:center;gap:10px;}
 .nav-btn{
@@ -1068,24 +1070,26 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 <div class="wrap">
 
   <header>
-    <div class="brand brand-frame">
-      <img class="brand-mark" src="./icon-192-v3.png" alt="" width="46" height="46">
-      <div class="brand-text">
-        <div class="eyebrow">Entretien — Mécanique / Électro-instrumentation</div>
-        <h1>Simulateur d'horaire de Relève Windsor</h1>
-        <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
+    <div class="header-frame">
+      <div class="brand">
+        <img class="brand-mark" src="./icon-192-v3.png" alt="" width="46" height="46">
+        <div class="brand-text">
+          <div class="eyebrow">Entretien — Mécanique / Électro-instrumentation</div>
+          <h1>Simulateur d'horaire de Relève Windsor</h1>
+          <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
+        </div>
       </div>
-    </div>
-    <div class="header-right">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="team-badge" id="teamBadge">—</span>
-        <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
-        <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
-        <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
-      </div>
-      <div class="header-meta">
-      Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
-      Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
+      <div class="header-right">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="team-badge" id="teamBadge">—</span>
+          <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
+          <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
+          <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
+        </div>
+        <div class="header-meta">
+        Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
+        Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
+        </div>
       </div>
     </div>
   </header>
@@ -1675,7 +1679,19 @@ function openProfileScreenFor(code){
   document.documentElement.classList.add('needProfile');
   document.getElementById('profileTeamTitle').textContent = `${t.name} — confirmer les employés`;
   document.querySelector('#profileScreen .profile-box').style.setProperty('--tc-accent', t.accent);
-  const existing = loadTeamProfile(code) || {names:{}, seniorityDates:{}};
+  // Pré-remplissage : priorité à l'état réel de l'équipe (realNames/seniorityDates), qui reflète
+  // les changements faits directement dans l'outil (panneau Noms) — plus à jour que le cache de
+  // profil si les deux ont divergé. Le cache de profil sert de repli seulement.
+  const cachedProfile = loadTeamProfile(code) || {names:{}, seniorityDates:{}};
+  let stateSnapshot = null;
+  try{
+    const raw = localStorage.getItem(LEGACY_STATE_KEY + '__' + code);
+    if(raw) stateSnapshot = JSON.parse(raw);
+  }catch(err){}
+  const existing = {
+    names: (stateSnapshot && stateSnapshot.realNames) || cachedProfile.names || {},
+    seniorityDates: (stateSnapshot && stateSnapshot.seniorityDates) || cachedProfile.seniorityDates || {}
+  };
   const rows = document.getElementById('profileRows');
   rows.innerHTML = EMPLOYEES.map(emp=>{
     const name = (existing.names && existing.names[emp.code]) || '';
@@ -1706,21 +1722,39 @@ document.getElementById('profileForm').addEventListener('submit', (e)=>{
   document.querySelectorAll('#profileRows input[data-field="date"]').forEach(inp=>{
     if(inp.value) dates[inp.dataset.code] = inp.value;
   });
-  const already = loadTeamProfile(code);
   saveTeamProfile(code, {names, seniorityDates: dates, confirmed:true});
-  // Si c'est la première fois qu'on ouvre cette équipe (aucun état sauvegardé encore), on
-  // amorce son état avec les noms/l'ordre d'ancienneté saisis ici.
+
+  // Fusionne dans l'état sauvegardé de l'équipe (créé s'il n'existe pas encore) — à CHAQUE
+  // confirmation du profil, pas juste la première fois. Ordre d'ancienneté recalculé
+  // automatiquement depuis les dates saisies (départage : ordre alphabétique de la lettre).
   const stateKey = LEGACY_STATE_KEY + '__' + code;
-  let hasState = false;
-  try{ hasState = !!localStorage.getItem(stateKey); }catch(err){}
-  if(!hasState){
-    let order = Object.keys(dates).filter(c=>dates[c]);
-    order.sort((a,b)=> dates[a]!==dates[b] ? (dates[a]<dates[b]?-1:1) : a.localeCompare(b));
-    if(order.length===0) order = ['D','G','A','B','C','F','E'].filter(c=>EMPLOYEES.some(e=>e.code===c));
-    try{
-      localStorage.setItem(stateKey, JSON.stringify({ realNames: names, seniorityOrder: order, seniorityDates: dates }));
-    }catch(err){}
-  }
+  let existing = {};
+  try{ const raw = localStorage.getItem(stateKey); if(raw) existing = JSON.parse(raw); }catch(err){}
+  const oldNames = existing.realNames || {};
+  const nameHist = existing.nameHistory || {};
+  const todayIso = new Date().toISOString().slice(0,10);
+  // Détecte un changement d'employé sur une lettre (nom différent de celui déjà enregistré) —
+  // on garde une trace avec la date d'entrée, pour les statistiques annuelles (n'affecte jamais
+  // l'affichage courant, qui utilise toujours le nom actuel).
+  Object.keys(names).forEach(c=>{
+    if(oldNames[c] && oldNames[c] !== names[c]){
+      if(!nameHist[c]) nameHist[c] = [];
+      const already = nameHist[c].some(entry=> entry.name===names[c] && entry.from===todayIso);
+      if(!already) nameHist[c].push({name: names[c], from: todayIso});
+    }
+  });
+  let order = Object.keys(dates).filter(c=>dates[c]);
+  order.sort((a,b)=> dates[a]!==dates[b] ? (dates[a]<dates[b]?-1:1) : a.localeCompare(b));
+  if(order.length===0) order = (existing.seniorityOrder && existing.seniorityOrder.length ? existing.seniorityOrder : ['D','G','A','B','C','F','E']).filter(c=>EMPLOYEES.some(e=>e.code===c));
+  const merged = Object.assign({}, existing, {
+    realNames: names,
+    seniorityDates: dates,
+    seniorityOrder: order,
+    nameHistory: nameHist
+  });
+  try{ localStorage.setItem(stateKey, JSON.stringify(merged)); }catch(err){}
+  if(sb){ try{ sb.from('team_states').upsert({ team_code: code, state: merged }); }catch(err){} }
+
   setActiveTeam(code);
   location.reload();
 });
