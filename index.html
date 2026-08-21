@@ -174,8 +174,9 @@ html.needProfile #profileScreen{
   color:#fff;background:var(--tc-accent,var(--jour));padding:4px 10px;border-radius:20px;
   display:inline-flex;align-items:center;gap:6px;
 }
-.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
-.header-right-group{display:flex;align-items:center;gap:16px;}
+.header-top-row{display:flex;align-items:center;justify-content:space-between;gap:22px;}
+.brand-text-center{flex:1;text-align:center;min-width:0;}
+.header-bottom-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-top:16px;}
 .logout-btn{
   font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.04em;
   background:var(--panel-3);border:1px solid var(--line);color:var(--text-dim);
@@ -183,7 +184,9 @@ html.needProfile #profileScreen{
 }
 .logout-btn:hover{background:rgba(224,100,95,0.12);border-color:rgba(224,100,95,0.4);color:#ef9a96;}
 @media (max-width:680px){
-  .header-right{align-items:flex-start;width:100%;flex-direction:row;justify-content:space-between;}
+  .header-top-row{flex-direction:column;text-align:center;}
+  .header-bottom-row{width:100%;flex-direction:column;align-items:flex-start;}
+  .header-bottom-row .header-meta{text-align:left;}
 }
 
 *{box-sizing:border-box;}
@@ -271,7 +274,7 @@ body{
 @media (max-width:680px){
   body{padding:16px 12px 44px;}
   header{align-items:flex-start;padding-bottom:16px;margin-bottom:16px;}
-  .brand-text h1{font-size:20px;}
+  .brand-text-center h1{font-size:20px;}
   .brand-mark{width:132px;height:132px;}
   .header-meta{text-align:left;font-size:10.5px;width:100%;}
   .control-bar{padding:12px;gap:10px;}
@@ -295,7 +298,7 @@ body{
 }
 @media (max-width:420px){
   .brand{gap:10px;}
-  .brand-text h1{font-size:18px;}
+  .brand-text-center h1{font-size:18px;}
   .eyebrow{font-size:9.5px;}
   .chip-toggle{padding:7px 10px;font-size:12.5px;}
 }
@@ -313,23 +316,22 @@ header{
   flex-wrap:wrap;
   gap:18px;
 }
-.brand{display:flex;align-items:center;gap:14px;}
 .brand-mark{
   width:160px;height:160px;border-radius:20px;
   flex:none;display:block;object-fit:cover;
   box-shadow:0 0 0 1px var(--jour), 0 6px 18px rgba(0,0,0,0.4);
 }
-.brand-text .eyebrow{
+.brand-text-center .eyebrow{
   font-family:'JetBrains Mono',monospace;
   font-size:11px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--text-dim2);margin-bottom:3px;
 }
-.brand-text h1{
+.brand-text-center h1{
   font-family:'Oswald',sans-serif;font-weight:600;
   font-size:26px;letter-spacing:.01em;margin:0;
   color:var(--text);
 }
-.brand-text .sub{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
+.brand-text-center .sub{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
 .header-meta{
   font-family:'JetBrains Mono',monospace;
   font-size:11.5px;color:var(--text-dim);
@@ -1073,27 +1075,25 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 
   <header>
     <div class="header-frame">
-      <div class="brand">
+      <div class="header-top-row">
         <img class="brand-mark" id="brandMark" src="./icon-192-v3.png" alt="" width="160" height="160">
-        <div class="brand-text">
+        <div class="brand-text-center">
           <h1>Simulateur d'horaire de Relève Windsor</h1>
           <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
         </div>
-      </div>
-      <div class="header-right-group">
-        <div class="header-right">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="team-badge" id="teamBadge">—</span>
-            <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
-            <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
-            <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
-          </div>
-          <div class="header-meta">
-          Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
-          Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
-          </div>
-        </div>
         <img class="brand-mark" id="brandMarkRight" src="./icon-192-v3.png" alt="" width="160" height="160">
+      </div>
+      <div class="header-bottom-row">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="team-badge" id="teamBadge">—</span>
+          <span class="team-badge" id="syncBadge" style="background:var(--panel-3);color:var(--text-dim);" title="Statut de synchronisation cloud">⏳ …</span>
+          <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
+          <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
+        </div>
+        <div class="header-meta">
+        Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
+        Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
+        </div>
       </div>
     </div>
   </header>
