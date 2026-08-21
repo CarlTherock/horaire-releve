@@ -1067,6 +1067,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 </div>
 <div id="profileScreen">
   <div class="profile-box">
+    <img id="profileTeamLogo" src="./icon-app-main.png" alt="" width="96" height="96" style="border-radius:14px;display:block;margin:0 auto 14px;">
     <h2 id="profileTeamTitle">Confirmer les employés</h2>
     <p>Nom et date d'ancienneté de métier pour chaque lettre — modifiable ici, et plus tard dans l'outil.</p>
     <form id="profileForm">
@@ -1700,6 +1701,8 @@ function openProfileScreenFor(code){
   document.documentElement.classList.remove('needTeam');
   document.documentElement.classList.add('needProfile');
   document.getElementById('profileTeamTitle').textContent = `${t.name} — confirmer les employés`;
+  const logoImg = document.getElementById('profileTeamLogo');
+  if(logoImg) logoImg.src = t.logo || './icon-app-main.png';
   document.querySelector('#profileScreen .profile-box').style.setProperty('--tc-accent', t.accent);
   // Pré-remplissage : priorité à l'état réel de l'équipe (realNames/seniorityDates), qui reflète
   // les changements faits directement dans l'outil (panneau Noms) — plus à jour que le cache de
