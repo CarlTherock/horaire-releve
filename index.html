@@ -245,19 +245,26 @@ header{
 /* ===== WEEK CONTROL BAR ===== */
 .control-bar{
   display:flex;align-items:center;gap:16px;flex-wrap:wrap;
-  background:var(--panel);border:1px solid var(--line);
+  background:linear-gradient(160deg, rgba(61,139,255,0.10), rgba(14,19,26,0.92)), var(--panel);
+  border:1px solid rgba(76,170,255,0.4);
   border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;
+  box-shadow:0 0 24px -10px rgba(61,139,255,0.35);
 }
 .week-nav{display:flex;align-items:center;gap:10px;}
 .nav-btn{
-  width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+  width:34px;height:34px;border-radius:8px;border:1px solid rgba(76,170,255,0.3);
   background:var(--panel-2);color:var(--text);cursor:pointer;
   font-size:16px;display:flex;align-items:center;justify-content:center;
   transition:.15s;
 }
-.nav-btn:hover{background:var(--panel-3);border-color:#3a4a5e;}
+.nav-btn:hover{background:var(--panel-3);border-color:#4ba8ff;}
 .week-label{font-family:'Oswald',sans-serif;font-size:17px;letter-spacing:.02em;min-width:230px;text-align:center;}
-.week-label .num{color:var(--text-dim);font-size:12px;font-family:'JetBrains Mono',monospace;display:block;margin-top:1px;letter-spacing:.08em;}
+#weekRange{
+  background:linear-gradient(90deg,#5ce1ff,#3d8bff);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+  font-weight:700;
+}
+.week-label .num{color:rgba(140,205,255,0.75);font-size:12px;font-family:'JetBrains Mono',monospace;display:block;margin-top:1px;letter-spacing:.08em;}
 .today-btn{
   font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;
   background:transparent;border:1px solid var(--line);color:var(--text-dim);
@@ -312,15 +319,13 @@ header{
   padding:8px 14px;border-radius:8px;cursor:pointer;flex:none;white-space:nowrap;
 }
 .jo-stat-jump-btn:hover{background:rgba(154,139,240,0.28);}
-/* Surlignage temporaire des 3 rectangles (remplacements/JO dispo/JO restant) au clic du bouton —
-   pulsation (grossit/rétrécit + glow qui bat) plutôt qu'un simple contour statique, pour que ce
-   soit repérable même du coin de l'œil, sur toute la durée des 5 secondes. */
+/* Surlignage temporaire des 3 rectangles (JO dispo/remplacements/JO restant) au clic du bouton —
+   pulsation (grossit/rétrécit + glow qui bat) en même temps sur les 3, sur toute la durée des
+   10 secondes. */
 .sim-stats.sim-stats-highlight .sim-stat{
   position:relative;z-index:1;
-  animation:simStatPulse 0.85s ease-in-out 0s 6;
+  animation:simStatPulse 1s ease-in-out 0s 10;
 }
-.sim-stats.sim-stats-highlight .sim-stat:nth-child(2){animation-delay:.12s;}
-.sim-stats.sim-stats-highlight .sim-stat:nth-child(3){animation-delay:.24s;}
 @keyframes simStatPulse{
   0%{ transform:scale(1); border-color:var(--line); box-shadow:0 0 0 0 rgba(154,139,240,0); }
   50%{ transform:scale(1.08); border-color:var(--jo); box-shadow:0 0 18px 6px rgba(154,139,240,0.55); }
@@ -956,6 +961,16 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
     </div>
   </header>
 
+  <div class="jo-stat-strip">
+    <div class="jo-stat-num" id="joStatNum">—</div>
+    <div class="jo-stat-text">
+      <div class="jo-stat-label">JO disponibles cette semaine</div>
+      <div class="jo-stat-sub" id="joStatSub">Réservistes E · F · G</div>
+    </div>
+    <button class="jo-stat-jump-btn" id="jumpToSimBtn">📊 Voir le comblement</button>
+    <div class="jo-stat-breakdown" id="joStatBreakdown"></div>
+  </div>
+
   <div class="control-bar">
     <div class="week-nav">
       <button class="nav-btn" id="prevWeek">‹</button>
@@ -978,16 +993,6 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
         <span class="dot"></span><span id="freezeText">—</span>
       </div>
     </div>
-  </div>
-
-  <div class="jo-stat-strip">
-    <div class="jo-stat-num" id="joStatNum">—</div>
-    <div class="jo-stat-text">
-      <div class="jo-stat-label">JO disponibles cette semaine</div>
-      <div class="jo-stat-sub" id="joStatSub">Réservistes E · F · G</div>
-    </div>
-    <button class="jo-stat-jump-btn" id="jumpToSimBtn">📊 Voir le comblement</button>
-    <div class="jo-stat-breakdown" id="joStatBreakdown"></div>
   </div>
 
   <div class="real-banner" id="realBanner" style="display:none;">
@@ -3338,8 +3343,8 @@ function renderResultBox(assignments, vac, specialRuleCount, stats, sickReservis
     }).join('') + `</div>`;
   }
   html += `<div class="sim-stats">
-    <div class="sim-stat"><span class="sim-stat-num">${stats.totalReplacements}</span><span class="sim-stat-label">Remplacements à faire</span></div>
     <div class="sim-stat"><span class="sim-stat-num">${stats.totalJoAvailable}</span><span class="sim-stat-label">JO disponibles (E·F·G)</span></div>
+    <div class="sim-stat"><span class="sim-stat-num">${stats.totalReplacements}</span><span class="sim-stat-label">Remplacements à faire</span></div>
     <div class="sim-stat ${stats.joRemaining<0?'sim-stat-warn':''}"><span class="sim-stat-num">${stats.joRemaining}</span><span class="sim-stat-label">JO restant après comblement</span></div>
   </div>`;
   assignments
@@ -3510,7 +3515,7 @@ document.getElementById('jumpToSimBtn').onclick = ()=>{
   const statsBox = resultBox.querySelector('.sim-stats');
   if(statsBox){
     statsBox.classList.add('sim-stats-highlight');
-    setTimeout(()=> statsBox.classList.remove('sim-stats-highlight'), 5400);
+    setTimeout(()=> statsBox.classList.remove('sim-stats-highlight'), 10000);
   }
 };
 document.getElementById('runSim').onclick = runSimulation;
