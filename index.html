@@ -69,7 +69,7 @@ html.locked #lockScreen{
   padding:20px;
 }
 .lock-box{
-  width:100%;max-width:360px;
+  width:100%;max-width:920px;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
   text-align:center;
@@ -95,6 +95,14 @@ html.locked #lockScreen{
 .lock-error{
   color:var(--alert);font-size:12px;margin-top:12px;min-height:16px;font-family:'JetBrains Mono',monospace;
 }
+#legalFooter{
+  position:fixed;left:0;right:0;bottom:0;z-index:10000;
+  text-align:center;padding:5px 10px;
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.01em;
+  color:rgba(255,255,255,0.28);
+  background:rgba(10,13,18,0.55);
+  pointer-events:none;
+}
 
 /* ===== ÉCRAN CHOIX D'ÉQUIPE ===== */
 html.needTeam body > .wrap{display:none !important;}
@@ -107,7 +115,7 @@ html.needTeam #teamSelectScreen{
   padding:20px;
 }
 .team-box{
-  width:100%;max-width:440px;
+  width:100%;max-width:640px;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
   text-align:center;
@@ -1022,9 +1030,10 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 </head>
 <body>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<div id="legalFooter">© Carl Desrochers — Idée originale et conception complète de ce logiciel. Tous droits réservés.</div>
 <div id="lockScreen">
   <div class="lock-box">
-    <img src="./icon-app-main.png" alt="" width="208" height="208" style="border-radius:20px;">
+    <img src="./icon-app-main.png" alt="" width="832" height="832" style="border-radius:20px;max-width:100%;height:auto;">
     <h2>Simulateur d'horaire — Relève Windsor</h2>
     <p>Accès protégé — entrer les identifiants</p>
     <form id="lockForm" autocomplete="off">
@@ -1037,7 +1046,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 </div>
 <div id="teamSelectScreen">
   <div class="team-box">
-    <img src="./icon-app-main.png" alt="" width="140" height="140" style="border-radius:16px;margin-bottom:14px;">
+    <img src="./icon-app-main.png" alt="" width="560" height="560" style="border-radius:16px;margin-bottom:14px;max-width:100%;height:auto;">
     <h2>Choisir une équipe</h2>
     <p>Sélectionne l'équipe à ouvrir dans le simulateur</p>
     <div class="team-grid" id="teamGrid"></div>
