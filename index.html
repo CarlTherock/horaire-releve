@@ -123,6 +123,7 @@ html.needTeam #teamSelectScreen{
 }
 .team-choice-btn:hover{filter:brightness(1.15);transform:translateX(2px);}
 .team-choice-btn .tswatch{width:14px;height:14px;border-radius:50%;flex:none;background:var(--tc-accent,var(--jour));}
+.team-choice-btn .tswatch-logo{width:32px;height:32px;border-radius:50%;flex:none;object-fit:cover;border:1px solid rgba(255,255,255,0.15);}
 .team-choice-btn .tname{flex:1;}
 .team-choice-btn .tsub{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-weight:400;}
 
@@ -314,7 +315,7 @@ header{
 .brand{display:flex;align-items:center;gap:14px;}
 .brand-mark{
   width:46px;height:46px;border-radius:10px;
-  flex:none;display:block;
+  flex:none;display:block;object-fit:cover;
   box-shadow:0 0 0 1px var(--jour), 0 6px 18px rgba(0,0,0,0.4);
 }
 .brand-text .eyebrow{
@@ -1072,7 +1073,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
   <header>
     <div class="header-frame">
       <div class="brand">
-        <img class="brand-mark" src="./icon-192-v3.png" alt="" width="46" height="46">
+        <img class="brand-mark" id="brandMark" src="./icon-192-v3.png" alt="" width="46" height="46">
         <div class="brand-text">
           <h1>Simulateur d'horaire de Relève Windsor</h1>
           <div class="sub">Usine Windsor · Convention collective 2022-2026 · Procédure de gestion des relèves</div>
@@ -1559,7 +1560,7 @@ let seniorityDates = {};
    Ajouté le 21 août 2026 (voir RESUME_SELECTEUR_EQUIPE.md pour le plan d'origine).
 ============================================================ */
 const TEAMS = {
-  TEI_USINE:      {code:'TEI_USINE',      name:'TEI Usine',        accent:'#765138'},
+  TEI_USINE:      {code:'TEI_USINE',      name:'TEI Usine',        accent:'#765138', logo:'./icon-tei-usine.png'},
   TEI_NORD:       {code:'TEI_NORD',       name:'TEI Nord',         accent:'#5C8A2E'},
   TEI_SUD:        {code:'TEI_SUD',        name:'TEI Sud',          accent:'#5C8A2E'},
   MECANIQUE_NORD: {code:'MECANIQUE_NORD', name:'Mécanique Nord',   accent:'#2E6FD9'},
@@ -1653,8 +1654,9 @@ function renderTeamSelectScreen(){
   if(!grid) return;
   grid.innerHTML = TEAM_ORDER.map(code=>{
     const t = TEAMS[code];
+    const swatch = t.logo ? `<img class="tswatch-logo" src="${t.logo}" alt="">` : `<span class="tswatch"></span>`;
     return `<button type="button" class="team-choice-btn" data-team="${code}" style="--tc-accent:${t.accent};">
-      <span class="tswatch"></span>
+      ${swatch}
       <span class="tname">${t.name}</span>
       <span class="tsub">${code===getActiveTeam()?'équipe actuelle':''}</span>
     </button>`;
@@ -1781,6 +1783,8 @@ function applyActiveTeamTheme(){
   document.documentElement.style.setProperty('--tc-accent-rgb', hexToRgbString(t.accent));
   const badge = document.getElementById('teamBadge');
   if(badge) badge.textContent = t.name;
+  const mark = document.getElementById('brandMark');
+  if(mark) mark.src = t.logo || './icon-192-v3.png';
 }
 
 /* ============================================================
