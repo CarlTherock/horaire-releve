@@ -69,7 +69,7 @@ html.locked #lockScreen{
   padding:20px;
 }
 .lock-box{
-  width:100%;max-width:920px;
+  width:100%;max-width:460px;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
   text-align:center;
@@ -112,10 +112,10 @@ html.needTeam #teamSelectScreen{
   display:flex;align-items:center;justify-content:center;
   position:fixed;inset:0;z-index:9999;
   background:radial-gradient(circle at 30% 20%, #1a2230 0%, #0e131a 70%);
-  padding:20px;
+  padding:20px;overflow-y:auto;
 }
 .team-box{
-  width:100%;max-width:640px;
+  width:100%;max-width:320px;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
   text-align:center;
@@ -1033,7 +1033,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 <div id="legalFooter">© Carl Desrochers — Idée originale et conception complète de ce logiciel. Tous droits réservés.</div>
 <div id="lockScreen">
   <div class="lock-box">
-    <img src="./icon-app-main.png" alt="" width="832" height="832" style="border-radius:20px;max-width:100%;height:auto;">
+    <img src="./icon-app-main.png" alt="" width="416" height="416" style="border-radius:20px;max-width:100%;height:auto;">
     <h2>Simulateur d'horaire — Relève Windsor</h2>
     <p>Accès protégé — entrer les identifiants</p>
     <form id="lockForm" autocomplete="off">
@@ -1046,7 +1046,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 </div>
 <div id="teamSelectScreen">
   <div class="team-box">
-    <img src="./icon-app-main.png" alt="" width="560" height="560" style="border-radius:16px;margin-bottom:14px;max-width:100%;height:auto;">
+    <img src="./icon-app-main.png" alt="" width="280" height="280" style="border-radius:16px;margin-bottom:14px;max-width:100%;height:auto;">
     <h2>Choisir une équipe</h2>
     <p>Sélectionne l'équipe à ouvrir dans le simulateur</p>
     <div class="team-grid" id="teamGrid"></div>
