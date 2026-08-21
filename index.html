@@ -134,7 +134,7 @@ html.needTeam #teamSelectScreen{
 }
 .team-choice-btn:hover{filter:brightness(1.15);transform:translateY(-2px);}
 .team-choice-btn .tswatch{width:14px;height:14px;border-radius:50%;flex:none;background:var(--tc-accent,var(--jour));}
-.team-choice-btn .tswatch-logo{width:72px;height:72px;border-radius:50%;flex:none;object-fit:cover;border:1px solid rgba(255,255,255,0.15);}
+.team-choice-btn .tswatch-logo{width:86px;height:86px;border-radius:50%;flex:none;object-fit:cover;border:1px solid rgba(255,255,255,0.15);}
 .team-choice-btn .tname{flex:none;line-height:1.25;}
 .team-choice-btn .tsub{font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-weight:400;min-height:12px;}
 
@@ -1065,7 +1065,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
 </div>
 <div id="teamSelectScreen">
   <div class="team-box">
-    <img src="./icon-app-main.png" alt="" width="420" height="420" style="border-radius:16px;margin-bottom:14px;max-width:100%;height:auto;">
+    <img src="./icon-app-main.png" alt="" width="357" height="357" style="border-radius:16px;margin-bottom:14px;max-width:100%;height:auto;">
     <h2>Choisir une équipe</h2>
     <p>Sélectionne l'équipe à ouvrir dans le simulateur</p>
     <div class="team-grid" id="teamGrid"></div>
@@ -1594,7 +1594,7 @@ const TEAMS = {
   MECANIQUE_NORD: {code:'MECANIQUE_NORD', name:'Mécanique Nord',   accent:'#2E6FD9', logo:'./icon-mec-nord.png'},
   MECANIQUE_SUD:  {code:'MECANIQUE_SUD',  name:'Mécanique Sud',    accent:'#2E6FD9', logo:'./icon-mec-sud.png'},
 };
-const TEAM_ORDER = ['TEI_USINE','TEI_NORD','TEI_SUD','MECANIQUE_NORD','MECANIQUE_SUD'];
+const TEAM_ORDER = ['TEI_NORD','TEI_USINE','TEI_SUD','MECANIQUE_NORD','MECANIQUE_SUD'];
 const ACTIVE_TEAM_KEY = 'horaire-releve-active-team';
 const LEGACY_STATE_KEY = 'horaire-releve-state-v1';
 function getActiveTeam(){ return localStorage.getItem(ACTIVE_TEAM_KEY); }
