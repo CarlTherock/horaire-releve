@@ -312,10 +312,19 @@ header{
   padding:8px 14px;border-radius:8px;cursor:pointer;flex:none;white-space:nowrap;
 }
 .jo-stat-jump-btn:hover{background:rgba(154,139,240,0.28);}
-/* Surlignage temporaire des 3 rectangles (remplacements/JO dispo/JO restant) au clic du bouton */
+/* Surlignage temporaire des 3 rectangles (remplacements/JO dispo/JO restant) au clic du bouton —
+   pulsation (grossit/rétrécit + glow qui bat) plutôt qu'un simple contour statique, pour que ce
+   soit repérable même du coin de l'œil, sur toute la durée des 5 secondes. */
 .sim-stats.sim-stats-highlight .sim-stat{
-  border:2px solid var(--jo);box-shadow:0 0 0 3px rgba(154,139,240,0.3);
-  transition:border-color .3s, box-shadow .3s;
+  position:relative;z-index:1;
+  animation:simStatPulse 0.85s ease-in-out 0s 6;
+}
+.sim-stats.sim-stats-highlight .sim-stat:nth-child(2){animation-delay:.12s;}
+.sim-stats.sim-stats-highlight .sim-stat:nth-child(3){animation-delay:.24s;}
+@keyframes simStatPulse{
+  0%{ transform:scale(1); border-color:var(--line); box-shadow:0 0 0 0 rgba(154,139,240,0); }
+  50%{ transform:scale(1.08); border-color:var(--jo); box-shadow:0 0 18px 6px rgba(154,139,240,0.55); }
+  100%{ transform:scale(1); border-color:var(--line); box-shadow:0 0 0 0 rgba(154,139,240,0); }
 }
 
 /* ===== LEGEND ===== */
@@ -3501,7 +3510,7 @@ document.getElementById('jumpToSimBtn').onclick = ()=>{
   const statsBox = resultBox.querySelector('.sim-stats');
   if(statsBox){
     statsBox.classList.add('sim-stats-highlight');
-    setTimeout(()=> statsBox.classList.remove('sim-stats-highlight'), 5000);
+    setTimeout(()=> statsBox.classList.remove('sim-stats-highlight'), 5400);
   }
 };
 document.getElementById('runSim').onclick = runSimulation;
