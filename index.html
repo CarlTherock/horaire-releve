@@ -3,9 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <script>
-  // Anti-flash : applique la classe "locked" AVANT le rendu si pas encore déverrouillé sur cet appareil/navigateur
+  // Anti-flash : détermine l'écran à afficher AVANT le rendu (mot de passe / choix d'équipe / profils / app)
   if(localStorage.getItem('horaireUnlocked') !== '1'){
     document.documentElement.classList.add('locked');
+  } else {
+    var __at = localStorage.getItem('horaire-releve-active-team');
+    var __legacy = localStorage.getItem('horaire-releve-state-v1');
+    if(!__at && __legacy){
+      // Migration à faire par le script principal (installation d'avant le sélecteur d'équipe) —
+      // ne rien ajouter ici, l'app se peuplera normalement une fois la migration faite.
+    } else if(!__at){
+      document.documentElement.classList.add('needTeam');
+    } else {
+      var __pr = null;
+      try{ __pr = JSON.parse(localStorage.getItem('horaire-releve-profile-v1__'+__at)); }catch(e){}
+      if(!__pr || !__pr.confirmed) document.documentElement.classList.add('needProfile');
+    }
   }
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -81,6 +94,84 @@ html.locked #lockScreen{
 .lock-box button[type="submit"]:hover{filter:brightness(1.08);}
 .lock-error{
   color:var(--alert);font-size:12px;margin-top:12px;min-height:16px;font-family:'JetBrains Mono',monospace;
+}
+
+/* ===== ÉCRAN CHOIX D'ÉQUIPE ===== */
+html.needTeam body > .wrap{display:none !important;}
+html.needTeam #lockScreen{display:none !important;}
+#teamSelectScreen{display:none;}
+html.needTeam #teamSelectScreen{
+  display:flex;align-items:center;justify-content:center;
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(circle at 30% 20%, #1a2230 0%, #0e131a 70%);
+  padding:20px;
+}
+.team-box{
+  width:100%;max-width:440px;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  text-align:center;
+}
+.team-box h2{font-family:'Oswald',sans-serif;font-weight:600;font-size:18px;color:var(--text);margin:0 0 6px;}
+.team-box p{font-size:12.5px;color:var(--text-dim);margin:0 0 22px;}
+.team-grid{display:flex;flex-direction:column;gap:10px;}
+.team-choice-btn{
+  display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;
+  background:var(--panel-2);border:1px solid var(--line);border-left:6px solid var(--tc-accent,var(--jour));
+  border-radius:9px;color:var(--text);font-family:'Oswald',sans-serif;font-weight:500;
+  font-size:15px;padding:13px 16px;cursor:pointer;transition:.15s;text-align:left;
+}
+.team-choice-btn:hover{filter:brightness(1.15);transform:translateX(2px);}
+.team-choice-btn .tswatch{width:14px;height:14px;border-radius:50%;flex:none;background:var(--tc-accent,var(--jour));}
+.team-choice-btn .tname{flex:1;}
+.team-choice-btn .tsub{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-weight:400;}
+
+/* ===== ÉCRAN PROFILS D'ÉQUIPE (noms + ancienneté) ===== */
+html.needProfile body > .wrap{display:none !important;}
+html.needProfile #lockScreen{display:none !important;}
+#profileScreen{display:none;}
+html.needProfile #profileScreen{
+  display:flex;align-items:center;justify-content:center;
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(circle at 30% 20%, #1a2230 0%, #0e131a 70%);
+  padding:20px;overflow-y:auto;
+}
+.profile-box{
+  width:100%;max-width:640px;margin:20px 0;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:28px 26px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  border-top:5px solid var(--tc-accent,var(--jour));
+}
+.profile-box h2{font-family:'Oswald',sans-serif;font-weight:600;font-size:18px;color:var(--text);margin:0 0 4px;text-align:center;}
+.profile-box p{font-size:12.5px;color:var(--text-dim);margin:0 0 20px;text-align:center;}
+.profile-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+.profile-row{
+  display:grid;grid-template-columns:34px 1fr 150px;gap:8px;align-items:center;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+}
+.profile-row .pletter{
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:var(--tc-accent,var(--jour));
+  text-align:center;
+}
+.profile-row input{
+  width:100%;box-sizing:border-box;background:var(--panel-3);border:1px solid var(--line);
+  border-radius:6px;color:var(--text);font-size:13px;padding:8px 9px;font-family:'JetBrains Mono',monospace;
+}
+.profile-row input::placeholder{color:var(--text-dim2);}
+.profile-row input:focus{outline:none;border-color:var(--tc-accent,var(--jour));}
+.profile-row .pnodate{font-size:10.5px;color:var(--text-dim2);text-align:center;font-family:'JetBrains Mono',monospace;}
+.profile-actions{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.profile-actions button[type="submit"]{
+  flex:1;background:var(--tc-accent,var(--jour));border:none;border-radius:8px;color:#fff;
+  font-family:'Oswald',sans-serif;font-weight:600;font-size:14.5px;letter-spacing:.02em;
+  padding:12px;cursor:pointer;transition:.15s;
+}
+.profile-actions button[type="submit"]:hover{filter:brightness(1.1);}
+
+.team-badge{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:#fff;background:var(--tc-accent,var(--jour));padding:4px 10px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:6px;
 }
 .header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
 .logout-btn{
@@ -214,7 +305,7 @@ header{
   align-items:flex-end;
   flex-wrap:wrap;
   gap:18px;
-  border-bottom:1px solid var(--line);
+  border-bottom:3px solid var(--tc-accent,var(--line));
   padding-bottom:20px;
   margin-bottom:22px;
 }
@@ -931,6 +1022,27 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
     </form>
   </div>
 </div>
+<div id="teamSelectScreen">
+  <div class="team-box">
+    <img src="./icon-192-v3.png" alt="" width="52" height="52" style="border-radius:10px;margin-bottom:14px;">
+    <h2>Choisir une équipe</h2>
+    <p>Sélectionne l'équipe à ouvrir dans le simulateur</p>
+    <div class="team-grid" id="teamGrid"></div>
+  </div>
+</div>
+<div id="profileScreen">
+  <div class="profile-box">
+    <h2 id="profileTeamTitle">Confirmer les employés</h2>
+    <p>Nom et date d'ancienneté de métier pour chaque lettre — modifiable ici, et plus tard dans l'outil.</p>
+    <form id="profileForm">
+      <div class="profile-rows" id="profileRows"></div>
+      <div class="profile-actions">
+        <button type="button" class="print-btn print-btn-secondary" id="profileBackBtn" style="flex:none;">‹ Choisir une autre équipe</button>
+        <button type="submit">Confirmer et ouvrir le simulateur</button>
+      </div>
+    </form>
+  </div>
+</div>
 <div id="shareModal">
   <div class="lock-box" style="max-width:320px;">
     <h2 style="margin-bottom:4px;">📤 Partager l'horaire</h2>
@@ -953,7 +1065,11 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
       </div>
     </div>
     <div class="header-right">
-      <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="team-badge" id="teamBadge">—</span>
+        <button class="logout-btn" id="switchTeamBtn" title="Choisir une autre équipe">🔁 Changer d'équipe</button>
+        <button class="logout-btn" id="logoutBtn" title="Reverrouiller l'accès sur cet appareil">🔒 Déconnexion</button>
+      </div>
       <div class="header-meta">
       Cycle : <b>quarts de 12h, 7j/7</b> — J 7h00–19h00 · N 19h00–7h00<br>
       Effectif relève : <b>4,5 titulaires</b> (A·B·C·D·G) + <b>2,5 réservistes</b> (E·F·G)
@@ -1099,6 +1215,7 @@ body.capture-mode .print-week-block .swap-dot{ background:#2a2f8f !important; co
       <h2 style="font-family:'Oswald',sans-serif;font-weight:500;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;">Paramètres — Ordre d'ancienneté (surtemps)</h2>
       <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">La lettre (A à G) ne reflète pas l'ancienneté réelle — ce n'est qu'une position sur l'horaire maître. Classez ici l'ordre d'ancienneté du plus ancien (haut) au plus jeune (bas) : c'est cet ordre, et non l'ordre E-F-G, qui détermine qui se voit offrir les 2 quarts de surtemps.</p>
       <div id="seniorityList" style="display:flex;flex-direction:column;gap:6px;max-width:420px;"></div>
+      <button class="print-btn print-btn-secondary" id="recomputeSeniorityBtn" style="margin-top:12px;" title="Recalcule l'ordre à partir des dates d'ancienneté de métier saisies pour cette équipe">🔄 Recalculer depuis les dates d'ancienneté</button>
     </div>
 
     <div class="backup-wrap" style="border-top:1px solid var(--line);padding:16px 18px 18px;">
@@ -1156,6 +1273,19 @@ function isUnlocked(){ return localStorage.getItem('horaireUnlocked') === '1'; }
 function doUnlock(){
   localStorage.setItem('horaireUnlocked','1');
   document.documentElement.classList.remove('locked');
+  migrateLegacyStateIfNeeded();
+  const code = getActiveTeam();
+  if(!code){
+    document.documentElement.classList.add('needTeam');
+    renderTeamSelectScreen();
+    return;
+  }
+  const profile = loadTeamProfile(code);
+  if(!profile || !profile.confirmed){
+    openProfileScreenFor(code);
+    return;
+  }
+  applyActiveTeamTheme();
 }
 function doLock(){
   localStorage.removeItem('horaireUnlocked');
@@ -1360,6 +1490,167 @@ function workingEmployeesThisWeek(){
    Modifiable directement dans l'outil (section « Paramètres — Ancienneté ») : la lettre ABCDG
    ne reflète PAS l'ancienneté, ce n'est qu'un ordre de position sur l'horaire maître. */
 let seniorityOrder = ['D','G','A','B','C','F','E']; // Roy, Desrochers, Beaudette, Spooner, Bruneau, Lachance, Lapierre
+/* Dates d'ancienneté de métier par lettre (A-G seulement — H/I/J n'entrent pas dans la cascade
+   de surtemps). Sert à calculer seniorityOrder automatiquement (voir recomputeSeniorityOrderFromDates
+   plus bas). L'ordre reste ensuite ajustable manuellement dans le panneau existant (flèches ▲▼) —
+   les dates servent de point de départ, pas d'un carcan permanent. */
+let seniorityDates = {};
+
+/* ============================================================
+   MULTI-ÉQUIPES — 5 équipes partageant le même cycle de rotation (ABCDG_CYCLE / JO_CYCLE),
+   mais avec des noms, des dates d'ancienneté et un état sauvegardé PROPRES à chacune.
+   Ajouté le 21 août 2026 (voir RESUME_SELECTEUR_EQUIPE.md pour le plan d'origine).
+============================================================ */
+const TEAMS = {
+  TEI_USINE:      {code:'TEI_USINE',      name:'TEI Usine',        accent:'#8B3A2E'},
+  TEI_NORD:       {code:'TEI_NORD',       name:'TEI Nord',         accent:'#5C8A2E'},
+  TEI_SUD:        {code:'TEI_SUD',        name:'TEI Sud',          accent:'#5C8A2E'},
+  MECANIQUE_NORD: {code:'MECANIQUE_NORD', name:'Mécanique Nord',   accent:'#2E6FD9'},
+  MECANIQUE_SUD:  {code:'MECANIQUE_SUD',  name:'Mécanique Sud',    accent:'#2E6FD9'},
+};
+const TEAM_ORDER = ['TEI_USINE','TEI_NORD','TEI_SUD','MECANIQUE_NORD','MECANIQUE_SUD'];
+const ACTIVE_TEAM_KEY = 'horaire-releve-active-team';
+const LEGACY_STATE_KEY = 'horaire-releve-state-v1';
+function getActiveTeam(){ return localStorage.getItem(ACTIVE_TEAM_KEY); }
+function setActiveTeam(code){ try{ localStorage.setItem(ACTIVE_TEAM_KEY, code); }catch(e){} }
+/* Clé de stockage de l'état (vacances, surtemps confirmés, semaine courante, etc.) — namespacée
+   par équipe active. Remplace l'ancienne clé unique 'horaire-releve-state-v1'. */
+function currentStorageKey(){ return LEGACY_STATE_KEY + '__' + (getActiveTeam() || 'TEI_USINE'); }
+function profileKeyFor(code){ return 'horaire-releve-profile-v1__' + code; }
+function loadTeamProfile(code){
+  try{
+    const raw = localStorage.getItem(profileKeyFor(code));
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function saveTeamProfile(code, profile){
+  try{ localStorage.setItem(profileKeyFor(code), JSON.stringify(profile)); }catch(e){}
+}
+
+/* Migration ponctuelle : si aucune équipe active n'est encore choisie sur cet appareil mais que
+   l'ancienne clé unique contient des données (installation d'avant le sélecteur d'équipe), on
+   les rapatrie automatiquement sous TEI Usine — pour ne rien perdre au moment du changement. */
+function migrateLegacyStateIfNeeded(){
+  if(getActiveTeam()) return;
+  let legacyRaw = null;
+  try{ legacyRaw = localStorage.getItem(LEGACY_STATE_KEY); }catch(e){}
+  if(!legacyRaw) return; // installation neuve, rien à migrer
+  try{
+    localStorage.setItem(LEGACY_STATE_KEY + '__TEI_USINE', legacyRaw);
+    const legacy = JSON.parse(legacyRaw);
+    const names = (legacy.realNames && typeof legacy.realNames==='object') ? legacy.realNames : REAL_NAMES;
+    // Dates placeholder qui respectent l'ordre d'ancienneté déjà confirmé (D,G,A,B,C,F,E) —
+    // à corriger par Carl dans l'écran de profils avec les vraies dates quand il le souhaite.
+    const placeholderDates = {D:'2000-01-01',G:'2001-01-01',A:'2002-01-01',B:'2003-01-01',C:'2004-01-01',F:'2005-01-01',E:'2006-01-01'};
+    saveTeamProfile('TEI_USINE', {names, seniorityDates: placeholderDates, confirmed:true});
+    setActiveTeam('TEI_USINE');
+  }catch(e){}
+}
+
+/* Calcule seniorityOrder (du plus ancien au plus jeune) à partir des dates d'ancienneté saisies.
+   Départage en cas d'égalité de date : ordre alphabétique de la lettre (fallback simple — à
+   préciser plus tard si la convention impose une autre règle). Lettres sans date connue sont
+   ignorées (elles n'apparaissent pas dans la cascade tant qu'aucune date n'est saisie). */
+function recomputeSeniorityOrderFromDates(){
+  const codes = Object.keys(seniorityDates).filter(c=>seniorityDates[c]);
+  if(codes.length===0) return; // rien à calculer, on garde l'ordre existant
+  codes.sort((a,b)=>{
+    if(seniorityDates[a] !== seniorityDates[b]) return seniorityDates[a] < seniorityDates[b] ? -1 : 1;
+    return a.localeCompare(b);
+  });
+  seniorityOrder = codes;
+}
+
+/* ---- Écran "choix d'équipe" ---- */
+function renderTeamSelectScreen(){
+  const grid = document.getElementById('teamGrid');
+  if(!grid) return;
+  grid.innerHTML = TEAM_ORDER.map(code=>{
+    const t = TEAMS[code];
+    return `<button type="button" class="team-choice-btn" data-team="${code}" style="--tc-accent:${t.accent};">
+      <span class="tswatch"></span>
+      <span class="tname">${t.name}</span>
+      <span class="tsub">${code===getActiveTeam()?'équipe actuelle':''}</span>
+    </button>`;
+  }).join('');
+  grid.querySelectorAll('.team-choice-btn').forEach(btn=>{
+    btn.onclick = ()=>{ openProfileScreenFor(btn.dataset.team); };
+  });
+}
+document.getElementById('switchTeamBtn').onclick = ()=>{
+  document.documentElement.classList.remove('needProfile');
+  document.documentElement.classList.add('needTeam');
+  renderTeamSelectScreen();
+};
+
+/* ---- Écran "profils" (noms + ancienneté par équipe) ---- */
+let profileScreenTeam = null;
+function openProfileScreenFor(code){
+  profileScreenTeam = code;
+  const t = TEAMS[code];
+  document.documentElement.classList.remove('needTeam');
+  document.documentElement.classList.add('needProfile');
+  document.getElementById('profileTeamTitle').textContent = `${t.name} — confirmer les employés`;
+  document.querySelector('#profileScreen .profile-box').style.setProperty('--tc-accent', t.accent);
+  const existing = loadTeamProfile(code) || {names:{}, seniorityDates:{}};
+  const rows = document.getElementById('profileRows');
+  rows.innerHTML = EMPLOYEES.map(emp=>{
+    const name = (existing.names && existing.names[emp.code]) || '';
+    const hasDate = ['A','B','C','D','E','F','G'].includes(emp.code);
+    const date = (existing.seniorityDates && existing.seniorityDates[emp.code]) || '';
+    return `<div class="profile-row">
+      <div class="pletter">${emp.code}</div>
+      <input type="text" data-code="${emp.code}" data-field="name" placeholder="Nom, Prénom" value="${name.replace(/"/g,'&quot;')}">
+      ${hasDate
+        ? `<input type="date" data-code="${emp.code}" data-field="date" value="${date}">`
+        : `<div class="pnodate">renfort de jour</div>`}
+    </div>`;
+  }).join('');
+}
+document.getElementById('profileBackBtn').onclick = ()=>{
+  document.documentElement.classList.remove('needProfile');
+  document.documentElement.classList.add('needTeam');
+  renderTeamSelectScreen();
+};
+document.getElementById('profileForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const code = profileScreenTeam;
+  const names = {};
+  const dates = {};
+  document.querySelectorAll('#profileRows input[data-field="name"]').forEach(inp=>{
+    if(inp.value.trim()) names[inp.dataset.code] = inp.value.trim();
+  });
+  document.querySelectorAll('#profileRows input[data-field="date"]').forEach(inp=>{
+    if(inp.value) dates[inp.dataset.code] = inp.value;
+  });
+  const already = loadTeamProfile(code);
+  saveTeamProfile(code, {names, seniorityDates: dates, confirmed:true});
+  // Si c'est la première fois qu'on ouvre cette équipe (aucun état sauvegardé encore), on
+  // amorce son état avec les noms/l'ordre d'ancienneté saisis ici.
+  const stateKey = LEGACY_STATE_KEY + '__' + code;
+  let hasState = false;
+  try{ hasState = !!localStorage.getItem(stateKey); }catch(err){}
+  if(!hasState){
+    let order = Object.keys(dates).filter(c=>dates[c]);
+    order.sort((a,b)=> dates[a]!==dates[b] ? (dates[a]<dates[b]?-1:1) : a.localeCompare(b));
+    if(order.length===0) order = ['D','G','A','B','C','F','E'].filter(c=>EMPLOYEES.some(e=>e.code===c));
+    try{
+      localStorage.setItem(stateKey, JSON.stringify({ realNames: names, seniorityOrder: order, seniorityDates: dates }));
+    }catch(err){}
+  }
+  setActiveTeam(code);
+  location.reload();
+});
+
+/* ---- Applique le thème (couleur d'accent) et le badge du header pour l'équipe active ---- */
+function applyActiveTeamTheme(){
+  const code = getActiveTeam() || 'TEI_USINE';
+  const t = TEAMS[code] || TEAMS.TEI_USINE;
+  document.documentElement.style.setProperty('--tc-accent', t.accent);
+  const badge = document.getElementById('teamBadge');
+  if(badge) badge.textContent = t.name;
+}
 
 /* ============================================================
    HORAIRE MAÎTRE JO (E·F·G) — CALENDRIER PERPÉTUEL
@@ -1821,16 +2112,15 @@ let currentDayIdx = 0;
    semaine et vue courantes. Reste sur cet appareil/navigateur seulement ;
    silencieux si le stockage est indisponible (navigation privée, quota plein).
 ============================================================ */
-const STORAGE_KEY = 'horaire-releve-state-v1';
 function saveState(){
   try{
     const otConfSerializable = {};
     Object.keys(otConfirmations).forEach(k=>{
       otConfSerializable[k] = {refused: Array.from(otConfirmations[k].refused), accepted: otConfirmations[k].accepted};
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(currentStorageKey(), JSON.stringify({
       weekStart: ymd(WEEKS[weekIndex].start),
-      showReal, filterWorkersOnly, currentDayIdx, seniorityOrder,
+      showReal, filterWorkersOnly, currentDayIdx, seniorityOrder, seniorityDates,
       vacDays: Array.from(vacDays.entries()),
       manualSwaps: manualSwaps,
       unavailableJo: Array.from(unavailableJo),
@@ -1844,9 +2134,10 @@ function saveState(){
 }
 function loadState(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(currentStorageKey());
     if(!raw) return;
     const s = JSON.parse(raw);
+    if(s.seniorityDates && typeof s.seniorityDates==='object') seniorityDates = s.seniorityDates;
     if(s.weekStart){
       const idx = WEEKS.findIndex(w=>ymd(w.start)===s.weekStart);
       if(idx>=0) weekIndex = idx;
@@ -1880,6 +2171,23 @@ function loadState(){
       });
     }
   }catch(e){}
+}
+/* ---- Bootstrap multi-équipes (exécuté à chaque chargement de page) ---- */
+migrateLegacyStateIfNeeded();
+if(isUnlocked()){
+  document.documentElement.classList.remove('locked');
+  const __bootTeam = getActiveTeam();
+  if(!__bootTeam){
+    document.documentElement.classList.add('needTeam');
+    renderTeamSelectScreen();
+  } else {
+    const __bootProfile = loadTeamProfile(__bootTeam);
+    if(!__bootProfile || !__bootProfile.confirmed){
+      openProfileScreenFor(__bootTeam);
+    } else {
+      applyActiveTeamTheme();
+    }
+  }
 }
 loadState();
 
@@ -2380,6 +2688,15 @@ function renderSeniorityList(){
     list.appendChild(row);
   });
 }
+document.getElementById('recomputeSeniorityBtn').onclick = ()=>{
+  if(Object.keys(seniorityDates).filter(c=>seniorityDates[c]).length===0){
+    alert("Aucune date d'ancienneté n'est encore enregistrée pour cette équipe — passe par « Changer d'équipe » puis reconfirme les profils pour en saisir, ou entre-les directement ici plus tard.");
+    return;
+  }
+  recomputeSeniorityOrderFromDates();
+  renderSeniorityList();
+  saveState();
+};
 
 /* Panneau d'édition des noms (A-J). H, I, J : un champ vide les garde masqués partout dans
    l'outil (grille, vue Jour, impression) — dès qu'un nom est inscrit, la lettre redevient visible. */
@@ -3591,14 +3908,14 @@ document.getElementById('print4WeeksBtn').onclick = ()=>{
    chaque appareil — l'export ne touche pas à "horaireUnlocked").
 ============================================================ */
 function exportConfig(){
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(currentStorageKey());
   const statusEl = document.getElementById('backupStatus');
   if(!raw){
     statusEl.style.color = 'var(--alert)';
     statusEl.textContent = "Rien à exporter pour l'instant.";
     return;
   }
-  const payload = { exportedAt: new Date().toISOString(), storageKey: STORAGE_KEY, data: JSON.parse(raw) };
+  const payload = { exportedAt: new Date().toISOString(), team: getActiveTeam(), storageKey: currentStorageKey(), data: JSON.parse(raw) };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3628,7 +3945,7 @@ document.getElementById('importConfigInput').addEventListener('change', (e)=>{
         e.target.value = '';
         return;
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(currentStorageKey(), JSON.stringify(data));
       statusEl.style.color = 'var(--ok)';
       statusEl.textContent = 'Configuration importée — rechargement…';
       setTimeout(()=> location.reload(), 600);
