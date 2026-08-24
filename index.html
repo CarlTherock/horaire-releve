@@ -2583,7 +2583,7 @@ function getKeptJoDays(empCode, w){
     if(workingDays.includes(i)) continue;
     if(isVacDay(empCode, i, week)) continue;
     const prevViolation = workingType[i-1] && shiftsAdjacent(i-1, workingType[i-1], i, 'j');
-    const nextViolation = workingType[i+1] && shiftsAdjacent(i, 'n', i+1, workingType[i+1]);
+    const nextViolation = workingType[i+1] && shiftsAdjacent(i, 'j', i+1, workingType[i+1]);
     if(prevViolation || nextViolation) continue;
     candidates.push(i);
   }
