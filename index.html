@@ -1761,9 +1761,17 @@ async function openProfileScreenFor(code){
       const stillEmpty = Array.from(document.querySelectorAll('#profileRows input[data-field="name"]')).every(inp=>!inp.value.trim())
         && Array.from(document.querySelectorAll('#profileRows input[data-field="date"]')).every(inp=>!inp.value);
       if(stillEmpty){
+        const cloudStateNames = (cloudState && cloudState.realNames) || {};
+        const cloudProfileNames = (cloudProfile && cloudProfile.names) || {};
+        const cloudStateDates = (cloudState && cloudState.seniorityDates) || {};
+        const cloudProfileDates = (cloudProfile && cloudProfile.seniorityDates) || {};
+        // Un objet vide ({}) est "truthy" en JS — donc on ne peut pas se fier à `||` pour choisir
+        // entre les deux sources : il faut vérifier explicitement qu'il y a au moins une clé avant
+        // de préférer une source à l'autre, sinon un objet vide légitimement retourné par l'une des
+        // deux tables masquait silencieusement des dates bel et bien présentes dans l'autre.
         const merged = {
-          names: (cloudState && cloudState.realNames) || (cloudProfile && cloudProfile.names) || {},
-          seniorityDates: (cloudState && cloudState.seniorityDates) || (cloudProfile && cloudProfile.seniorityDates) || {}
+          names: Object.keys(cloudStateNames).length ? cloudStateNames : cloudProfileNames,
+          seniorityDates: Object.keys(cloudStateDates).length ? cloudStateDates : cloudProfileDates
         };
         if(Object.keys(merged.names).length || Object.keys(merged.seniorityDates).length){
           renderRows(merged);
