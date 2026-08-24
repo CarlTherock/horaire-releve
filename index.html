@@ -1701,7 +1701,7 @@ document.getElementById('switchTeamBtn').onclick = ()=>{
 
 /* ---- Écran "profils" (noms + ancienneté par équipe) ---- */
 let profileScreenTeam = null;
-function openProfileScreenFor(code){
+async function openProfileScreenFor(code){
   profileScreenTeam = code;
   const t = TEAMS[code];
   document.documentElement.classList.remove('needTeam');
@@ -1710,6 +1710,20 @@ function openProfileScreenFor(code){
   const logoImg = document.getElementById('profileTeamLogo');
   if(logoImg) logoImg.src = t.logo || './icon-app-main.png';
   document.querySelector('#profileScreen .profile-box').style.setProperty('--tc-accent', t.accent);
+
+  const renderRows = (existing) => {
+    const rows = document.getElementById('profileRows');
+    rows.innerHTML = EMPLOYEES.map(emp=>{
+      const name = (existing.names && existing.names[emp.code]) || '';
+      const date = (existing.seniorityDates && existing.seniorityDates[emp.code]) || '';
+      return `<div class="profile-row">
+        <div class="pletter">${emp.code}</div>
+        <input type="text" data-code="${emp.code}" data-field="name" placeholder="Nom, Prénom" value="${name.replace(/"/g,'&quot;')}">
+        <input type="date" data-code="${emp.code}" data-field="date" value="${date}">
+      </div>`;
+    }).join('');
+  };
+
   // Pré-remplissage : priorité à l'état réel de l'équipe (realNames/seniorityDates), qui reflète
   // les changements faits directement dans l'outil (panneau Noms) — plus à jour que le cache de
   // profil si les deux ont divergé. Le cache de profil sert de repli seulement.
@@ -1723,16 +1737,40 @@ function openProfileScreenFor(code){
     names: (stateSnapshot && stateSnapshot.realNames) || cachedProfile.names || {},
     seniorityDates: (stateSnapshot && stateSnapshot.seniorityDates) || cachedProfile.seniorityDates || {}
   };
-  const rows = document.getElementById('profileRows');
-  rows.innerHTML = EMPLOYEES.map(emp=>{
-    const name = (existing.names && existing.names[emp.code]) || '';
-    const date = (existing.seniorityDates && existing.seniorityDates[emp.code]) || '';
-    return `<div class="profile-row">
-      <div class="pletter">${emp.code}</div>
-      <input type="text" data-code="${emp.code}" data-field="name" placeholder="Nom, Prénom" value="${name.replace(/"/g,'&quot;')}">
-      <input type="date" data-code="${emp.code}" data-field="date" value="${date}">
-    </div>`;
-  }).join('');
+  renderRows(existing);
+
+  // Repli cloud : si rien de local pour cette équipe sur CET appareil (cache vidé, nouvel appareil,
+  // navigateur nettoyé...), on va chercher le profil ET l'état sauvegardés sur Supabase avant de
+  // laisser l'écran vide — pullTeamProfileFromCloud() existait déjà mais n'était jamais appelée
+  // nulle part, donc un appareil sans cache local semblait avoir "tout perdu" même quand les
+  // données étaient toujours intactes dans le cloud.
+  const hasLocalData = Object.keys(existing.names).length > 0 || Object.keys(existing.seniorityDates).length > 0;
+  if(!hasLocalData && sb){
+    const timeout = new Promise(resolve=>setTimeout(()=>resolve(null), 5000));
+    const [cloudProfile, cloudState] = await Promise.all([
+      Promise.race([pullTeamProfileFromCloud(code), timeout]),
+      Promise.race([
+        sb.from('team_states').select('state').eq('team_code', code).maybeSingle()
+          .then(({data})=> (data && data.state) ? data.state : null).catch(()=>null),
+        timeout
+      ])
+    ]);
+    // On ne remplace l'écran que si l'utilisateur n'a encore rien tapé lui-même entre-temps
+    // (le pull cloud peut prendre jusqu'à quelques secondes).
+    if(profileScreenTeam === code){
+      const stillEmpty = Array.from(document.querySelectorAll('#profileRows input[data-field="name"]')).every(inp=>!inp.value.trim())
+        && Array.from(document.querySelectorAll('#profileRows input[data-field="date"]')).every(inp=>!inp.value);
+      if(stillEmpty){
+        const merged = {
+          names: (cloudState && cloudState.realNames) || (cloudProfile && cloudProfile.names) || {},
+          seniorityDates: (cloudState && cloudState.seniorityDates) || (cloudProfile && cloudProfile.seniorityDates) || {}
+        };
+        if(Object.keys(merged.names).length || Object.keys(merged.seniorityDates).length){
+          renderRows(merged);
+        }
+      }
+    }
+  }
 }
 document.getElementById('profileBackBtn').onclick = ()=>{
   document.documentElement.classList.remove('needProfile');
