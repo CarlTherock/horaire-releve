@@ -1792,9 +1792,25 @@ document.getElementById('profileForm').addEventListener('submit', async (e)=>{
   // le rechargement pouvait déclencher la synchro cloud entrante avant que l'écriture sortante
   // n'ait fini, et écraser les noms/dates qu'on vient tout juste de saisir par une version cloud
   // pas encore à jour. C'est ce qui causait les dates « qui ne restaient pas ».
-  const cloudWrite = sb ? sb.from('team_states').upsert({ team_code: code, state: merged }).then(()=>{}).catch(()=>{}) : Promise.resolve();
+  // NE PAS avaler l'erreur en silence : si l'upsert échoue (réseau, RLS, etc.), il faut le savoir —
+  // sinon syncStateFromCloud() au prochain chargement irait rechercher l'ancienne version cloud
+  // (pas encore mise à jour) et écraserait ce qu'on vient tout juste de saisir localement.
+  let cloudWriteError = null;
+  const cloudWrite = sb
+    ? sb.from('team_states').upsert({ team_code: code, state: merged }).then(({error})=>{ cloudWriteError = error; })
+        .catch(err=>{ cloudWriteError = err; })
+    : Promise.resolve();
   const timeout = new Promise(resolve=>setTimeout(resolve, 4000));
   await Promise.all([Promise.race([cloudWrite, timeout]), Promise.race([profilePush || Promise.resolve(), timeout])]);
+  setSyncBadge(cloudWriteError ? 'error' : 'synced');
+
+  // Garde-fou anti-écrasement : même si l'écriture cloud ci-dessus a réussi, on marque quand même
+  // "vient d'écrire localement" pour que le PROCHAIN syncStateFromCloud() (déclenché juste après
+  // le reload qui suit) saute une génération de pull s'il arrive dans les secondes qui suivent —
+  // le local qu'on vient d'enregistrer est forcément au moins aussi frais que le cloud à cet
+  // instant précis, donc rien à gagner à le remplacer, et un upsert lent/échoué ne peut plus faire
+  // revenir en arrière des noms/dates qu'on vient de saisir.
+  try{ localStorage.setItem('horaire-releve-skip-next-sync', String(Date.now())); }catch(err){}
 
   setActiveTeam(code);
   location.reload();
@@ -2328,6 +2344,15 @@ function pushStateToCloud(payload){
    pour ne jamais bloquer l'ouverture de l'app pendant l'appel réseau). */
 async function syncStateFromCloud(){
   if(!sb) { setSyncBadge('offline'); return; }
+  try{
+    const skipTs = parseInt(localStorage.getItem('horaire-releve-skip-next-sync') || '0', 10);
+    if(skipTs && (Date.now() - skipTs) < 10000){
+      localStorage.removeItem('horaire-releve-skip-next-sync');
+      setSyncBadge('synced');
+      return;
+    }
+    if(skipTs) localStorage.removeItem('horaire-releve-skip-next-sync'); // marqueur périmé (>10s) : on ignore, pull normal ci-dessous
+  }catch(e){}
   setSyncBadge('pending');
   try{
     const { data, error } = await sb.from('team_states').select('state').eq('team_code', getActiveTeam()).maybeSingle();
@@ -2958,6 +2983,7 @@ function renderNamesEditor(){
       if(v) REAL_NAMES[emp.code] = v; else delete REAL_NAMES[emp.code];
       refreshAll();
       renderVacCalendarPreview();
+      saveState();
     };
     row.querySelector('.name-hist-btn').onclick = ()=> toggleNameHistoryPanel(emp.code, row);
     editor.appendChild(row);
