@@ -2356,12 +2356,22 @@ function buildStatePayload(){
     realNames: REAL_NAMES,
     nameHistory,
     vacImportHistory,
-    importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])]))
+    importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])])),
+    updatedAt: Date.now()
   };
 }
+/* Horodatage du plus récent état qu'on a en main localement (chargé OU écrit) — sert de
+   garde-fou anti-écrasement dans syncStateFromCloud() : un pull cloud ne doit jamais remplacer
+   quelque chose de plus frais qu'on a déjà, même si le pull cloud technique a réussi. Sans ça,
+   une écriture encore en attente (debounce 600ms de pushStateToCloud) pouvait perdre la course
+   contre un syncStateFromCloud() lancé juste après un reload : le pull lisait l'ancienne version
+   cloud, l'appliquait par-dessus les données fraîches en mémoire, PUIS refreshAll() re-sauvegardait
+   cette vieille version — écrasant pour de bon ce qu'on venait tout juste de confirmer. */
+let lastKnownStateUpdatedAt = 0;
 function saveState(){
   try{
     const payload = buildStatePayload();
+    lastKnownStateUpdatedAt = payload.updatedAt;
     localStorage.setItem(currentStorageKey(), JSON.stringify(payload));
     pushStateToCloud(payload);
   }catch(e){}
@@ -2404,6 +2414,14 @@ async function syncStateFromCloud(){
     const { data, error } = await sb.from('team_states').select('state').eq('team_code', getActiveTeam()).maybeSingle();
     if(error){ setSyncBadge('error'); return; }
     if(data && data.state){
+      const cloudTs = typeof data.state.updatedAt === 'number' ? data.state.updatedAt : 0;
+      if(cloudTs > 0 && cloudTs <= lastKnownStateUpdatedAt){
+        // Le cloud est plus vieux (ou égal) que ce qu'on a déjà en mémoire/local — on l'ignore
+        // complètement : ni application, ni ré-écriture. C'est précisément ce qui empêchait la
+        // corruption décrite ci-dessus.
+        setSyncBadge('synced');
+        return;
+      }
       applyLoadedState(data.state);
       localStorage.setItem(currentStorageKey(), JSON.stringify(data.state));
       refreshAll();
@@ -2441,6 +2459,7 @@ function loadState(){
 }
 function applyLoadedState(s){
   try{
+    if(typeof s.updatedAt === 'number' && s.updatedAt > lastKnownStateUpdatedAt) lastKnownStateUpdatedAt = s.updatedAt;
     if(s.seniorityDates && typeof s.seniorityDates==='object') seniorityDates = Object.assign({}, seniorityDates, s.seniorityDates);
     if(s.weekStart){
       const idx = WEEKS.findIndex(w=>ymd(w.start)===s.weekStart);
