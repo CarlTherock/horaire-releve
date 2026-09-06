@@ -2,8 +2,10 @@ name: Supabase Keepalive
 
 on:
   schedule:
-    # Tous les jours à 10h00 UTC (~6h00 heure de l'Est)
-    - cron: '0 10 * * *'
+    # 3x/jour pour une marge de sécurité (Supabase pause après 7j d'inactivité)
+    - cron: '0 6 * * *'   # 6h UTC  (~2h  heure de l'Est)
+    - cron: '0 14 * * *'  # 14h UTC (~10h heure de l'Est)
+    - cron: '0 22 * * *'  # 22h UTC (~18h heure de l'Est)
   workflow_dispatch: {}
 
 jobs:
