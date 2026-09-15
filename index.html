@@ -2665,6 +2665,18 @@ function getKeptJoDays(empCode, w){
     const base = baseCellStatus(empCode, i);
     if(base.cls==='j' || base.cls==='n'){ workingDays.push(i); workingType[i] = base.cls; }
   }
+  // Jours "ancres" pour le collage (procédure pt.9) : un congé (personnel ou congé-férié) compte
+  // comme une journée de relève même s'il n'est pas travaillé — l'employé reste sur l'horaire cette
+  // semaine-là, donc les JO restants doivent se coller dessus, comme s'il s'agissait d'un quart.
+  // Contrairement à un quart J/N, un congé n'a pas d'heures réelles : il n'entre PAS dans
+  // workingType et ne participe donc jamais à la règle des 12h consécutives ci-dessous.
+  const anchorDays = workingDays.slice();
+  for(let i=0;i<7;i++){
+    if(anchorDays.includes(i)) continue;
+    const base = baseCellStatus(empCode, i);
+    if(base.cls==='conge' || base.cls==='ferie') anchorDays.push(i);
+  }
+  anchorDays.sort((a,b)=>a-b);
   // Jours candidats : lundi à vendredi (1 à 5) seulement, ni déjà travaillés, ni en absence, ET
   // qui ne créeraient pas un enchaînement de plus de 12h consécutives avec un jour déjà travaillé
   // (ex. jour juste après une nuit travaillée — pourrait devenir un quart de jour sans repos).
@@ -2681,14 +2693,14 @@ function getKeptJoDays(empCode, w){
   let kept;
   if(remaining <= 0){
     kept = new Set();
-  } else if(workingDays.length === 0){
-    // Rien travaillé encore cette semaine : pas de point d'ancrage — on retombe sur ses jours JO
-    // officiels de l'horaire maître, comportement normal.
+  } else if(anchorDays.length === 0){
+    // Rien travaillé ni de congé cette semaine : pas de point d'ancrage — on retombe sur ses jours
+    // JO officiels de l'horaire maître, comportement normal.
     const masterJo = candidates.filter(i => baseCellStatus(empCode, i).cls==='jo');
     kept = new Set(masterJo.slice(0, remaining));
   } else {
-    const lastWorked = Math.max(...workingDays);
-    const firstWorked = Math.min(...workingDays);
+    const lastWorked = Math.max(...anchorDays);
+    const firstWorked = Math.min(...anchorDays);
     const priority = [];
     for(let d=lastWorked+1; d<=5; d++) if(candidates.includes(d)) priority.push(d);
     for(let d=firstWorked-1; d>=1; d--) if(candidates.includes(d)) priority.push(d);
