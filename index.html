@@ -1667,13 +1667,15 @@ function migrateLegacyStateIfNeeded(){
    préciser plus tard si la convention impose une autre règle). Lettres sans date connue sont
    ignorées (elles n'apparaissent pas dans la cascade tant qu'aucune date n'est saisie). */
 function recomputeSeniorityOrderFromDates(){
-  const codes = Object.keys(seniorityDates).filter(c=>seniorityDates[c]);
+  const codes = Object.keys(seniorityDates).filter(c=>seniorityDates[c] && ['A','B','C','D','E','F','G'].includes(c));
   if(codes.length===0) return; // rien à calculer, on garde l'ordre existant
   codes.sort((a,b)=>{
     if(seniorityDates[a] !== seniorityDates[b]) return seniorityDates[a] < seniorityDates[b] ? -1 : 1;
     return a.localeCompare(b);
   });
-  seniorityOrder = codes;
+  // Les lettres sans date ne sortent plus de la cascade (sinon une seule date saisie réduisait l'ordre à 1 lettre) :
+  // elles restent à la suite, dans leur ordre actuel.
+  seniorityOrder = codes.concat(seniorityOrder.filter(c=>!codes.includes(c)));
 }
 
 /* ---- Écran "choix d'équipe" ---- */
@@ -1739,45 +1741,37 @@ async function openProfileScreenFor(code){
   };
   renderRows(existing);
 
-  // Repli cloud : si rien de local pour cette équipe sur CET appareil (cache vidé, nouvel appareil,
-  // navigateur nettoyé...), on va chercher le profil ET l'état sauvegardés sur Supabase avant de
-  // laisser l'écran vide — pullTeamProfileFromCloud() existait déjà mais n'était jamais appelée
-  // nulle part, donc un appareil sans cache local semblait avoir "tout perdu" même quand les
-  // données étaient toujours intactes dans le cloud.
-  const hasLocalData = Object.keys(existing.names).length > 0 || Object.keys(existing.seniorityDates).length > 0;
-  if(!hasLocalData && sb){
-    const timeout = new Promise(resolve=>setTimeout(()=>resolve(null), 5000));
-    const [cloudProfile, cloudState] = await Promise.all([
-      Promise.race([pullTeamProfileFromCloud(code), timeout]),
-      Promise.race([
-        sb.from('team_states').select('state').eq('team_code', code).maybeSingle()
-          .then(({data})=> (data && data.state) ? data.state : null).catch(()=>null),
-        timeout
-      ])
-    ]);
-    // On ne remplace l'écran que si l'utilisateur n'a encore rien tapé lui-même entre-temps
-    // (le pull cloud peut prendre jusqu'à quelques secondes).
-    if(profileScreenTeam === code){
-      const stillEmpty = Array.from(document.querySelectorAll('#profileRows input[data-field="name"]')).every(inp=>!inp.value.trim())
-        && Array.from(document.querySelectorAll('#profileRows input[data-field="date"]')).every(inp=>!inp.value);
-      if(stillEmpty){
-        const cloudStateNames = (cloudState && cloudState.realNames) || {};
-        const cloudProfileNames = (cloudProfile && cloudProfile.names) || {};
-        const cloudStateDates = (cloudState && cloudState.seniorityDates) || {};
-        const cloudProfileDates = (cloudProfile && cloudProfile.seniorityDates) || {};
-        // Un objet vide ({}) est "truthy" en JS — donc on ne peut pas se fier à `||` pour choisir
-        // entre les deux sources : il faut vérifier explicitement qu'il y a au moins une clé avant
-        // de préférer une source à l'autre, sinon un objet vide légitimement retourné par l'une des
-        // deux tables masquait silencieusement des dates bel et bien présentes dans l'autre.
-        const merged = {
-          names: Object.keys(cloudStateNames).length ? cloudStateNames : cloudProfileNames,
-          seniorityDates: Object.keys(cloudStateDates).length ? cloudStateDates : cloudProfileDates
-        };
-        if(Object.keys(merged.names).length || Object.keys(merged.seniorityDates).length){
-          renderRows(merged);
+  // Préremplissage depuis le cloud — TOUJOURS tenté (pas seulement quand le local est vide) : ne remplit que
+  // les champs encore vides. Le bouton de confirmation reste bloqué pendant la lecture, pour qu'on ne puisse
+  // jamais confirmer un formulaire à moitié vide par-dessus des données déjà sauvegardées.
+  const submitBtn = document.querySelector('#profileForm button[type="submit"]');
+  if(sb){
+    if(submitBtn) submitBtn.disabled = true;
+    try{
+      const { data: sess } = await sb.auth.getSession();
+      if(sess && sess.session){
+        const timeout = new Promise(resolve=>setTimeout(()=>resolve(null), 6000));
+        const [cloudProfile, cloudState] = await Promise.all([
+          Promise.race([pullTeamProfileFromCloud(code), timeout]),
+          Promise.race([
+            sb.from('team_states').select('state').eq('team_code', code).maybeSingle()
+              .then(({data})=> (data && data.state) ? data.state : null).catch(()=>null),
+            timeout
+          ])
+        ]);
+        if(profileScreenTeam === code){
+          const nm = Object.assign({}, cloudProfile && cloudProfile.names, cloudState && cloudState.realNames);
+          const dt = Object.assign({}, cloudProfile && cloudProfile.seniorityDates, cloudState && cloudState.seniorityDates);
+          document.querySelectorAll('#profileRows input[data-field="name"]').forEach(inp=>{
+            if(!inp.value.trim() && nm[inp.dataset.code]) inp.value = nm[inp.dataset.code];
+          });
+          document.querySelectorAll('#profileRows input[data-field="date"]').forEach(inp=>{
+            if(!inp.value && dt[inp.dataset.code]) inp.value = dt[inp.dataset.code];
+          });
         }
       }
-    }
+    }catch(err){}
+    finally{ if(submitBtn) submitBtn.disabled = false; }
   }
 }
 document.getElementById('profileBackBtn').onclick = ()=>{
@@ -1808,6 +1802,14 @@ document.getElementById('profileForm').addEventListener('submit', async (e)=>{
   const stateKey = LEGACY_STATE_KEY + '__' + code;
   let existing = {};
   try{ const raw = localStorage.getItem(stateKey); if(raw) existing = JSON.parse(raw); }catch(err){}
+  // Appareil sans état local pour cette équipe : on part de l'état du CLOUD (vacances, échanges, etc.), jamais d'un objet vide
+  // — sinon la confirmation écrasait tout le cloud avec presque rien.
+  if(!Object.keys(existing).length && sb){
+    try{
+      const { data } = await sb.from('team_states').select('state').eq('team_code', code).maybeSingle();
+      if(data && data.state) existing = data.state;
+    }catch(err){}
+  }
   const oldNames = existing.realNames || {};
   const nameHist = existing.nameHistory || {};
   const todayIso = new Date().toISOString().slice(0,10);
@@ -1831,6 +1833,7 @@ document.getElementById('profileForm').addEventListener('submit', async (e)=>{
     seniorityOrder: order,
     nameHistory: nameHist
   });
+  merged.updatedAt = Date.now(); merged.v = 2; delete merged.dirty; // estampille fiable : cette version est la plus récente
   try{ localStorage.setItem(stateKey, JSON.stringify(merged)); }catch(err){}
 
   // Important : on ATTEND la confirmation d'écriture cloud (avec un délai maximum de 4s pour ne
@@ -1849,14 +1852,6 @@ document.getElementById('profileForm').addEventListener('submit', async (e)=>{
   const timeout = new Promise(resolve=>setTimeout(resolve, 4000));
   await Promise.all([Promise.race([cloudWrite, timeout]), Promise.race([profilePush || Promise.resolve(), timeout])]);
   setSyncBadge(cloudWriteError ? 'error' : 'synced');
-
-  // Garde-fou anti-écrasement : même si l'écriture cloud ci-dessus a réussi, on marque quand même
-  // "vient d'écrire localement" pour que le PROCHAIN syncStateFromCloud() (déclenché juste après
-  // le reload qui suit) saute une génération de pull s'il arrive dans les secondes qui suivent —
-  // le local qu'on vient d'enregistrer est forcément au moins aussi frais que le cloud à cet
-  // instant précis, donc rien à gagner à le remplacer, et un upsert lent/échoué ne peut plus faire
-  // revenir en arrière des noms/dates qu'on vient de saisir.
-  try{ localStorage.setItem('horaire-releve-skip-next-sync', String(Date.now())); }catch(err){}
 
   setActiveTeam(code);
   location.reload();
@@ -2357,74 +2352,109 @@ function buildStatePayload(){
     nameHistory,
     vacImportHistory,
     importedVacKeys: Object.fromEntries(Object.keys(importedVacKeys).map(id=>[id, Array.from(importedVacKeys[id])])),
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    v: 2
   };
 }
-/* Horodatage du plus récent état qu'on a en main localement (chargé OU écrit) — sert de
-   garde-fou anti-écrasement dans syncStateFromCloud() : un pull cloud ne doit jamais remplacer
-   quelque chose de plus frais qu'on a déjà, même si le pull cloud technique a réussi. Sans ça,
-   une écriture encore en attente (debounce 600ms de pushStateToCloud) pouvait perdre la course
-   contre un syncStateFromCloud() lancé juste après un reload : le pull lisait l'ancienne version
-   cloud, l'appliquait par-dessus les données fraîches en mémoire, PUIS refreshAll() re-sauvegardait
-   cette vieille version — écrasant pour de bon ce qu'on venait tout juste de confirmer. */
-let lastKnownStateUpdatedAt = 0;
+/* ===== SYNCHRO MULTI-APPAREILS — règles ==================================================================
+   1) AUCUNE écriture cloud tant que CET appareil n'a pas lu le cloud au moins une fois (cloudPullDone).
+      Avant, un ordinateur neuf/vide (ou resté sur une vieille copie) écrasait le cloud avec son propre état
+      dès l'ouverture de l'app : c'est ce qui effaçait noms et dates en changeant d'ordinateur.
+   2) Les enregistrements automatiques du démarrage (refreshAll) ne sont PAS des modifications : pas de
+      nouvelle estampille, pas d'écriture cloud.
+   3) Cloud plus récent que le local → on applique le cloud. Local plus récent → on pousse le local.
+   4) Les dates d'ancienneté connues d'un côté mais absentes de l'autre sont rapatriées (jamais de perte).
+   Estampilles : seules celles écrites par cette version (v:2) sont fiables — les anciennes étaient
+   rafraîchies à chaque démarrage et ne voulaient rien dire. */
+let lastKnownStateUpdatedAt = 0;   // estampille du dernier état (local confirmé ou cloud) dont on est sûr
+let cloudPullDone = false;         // 1re lecture cloud terminée avec une session valide
+let bootDone = false;              // fin du démarrage : les saveState() d'avant ne sont pas des modifications
+let dirtyBeforePull = false;       // vraie modification de l'utilisateur AVANT la 1re lecture cloud
+let applyingCloudState = false;    // on applique un état venu du cloud (pas une modification)
+let __pushPending = false;
+let __lastCloudPullAt = 0;
 function saveState(){
   try{
     const payload = buildStatePayload();
+    if(applyingCloudState || !cloudPullDone){
+      // Écriture LOCALE seulement : pas de nouvelle estampille, pas d'envoi au cloud.
+      payload.updatedAt = lastKnownStateUpdatedAt;
+      if(!applyingCloudState && bootDone) dirtyBeforePull = true; // vraie modif faite avant la 1re lecture
+      payload.dirty = dirtyBeforePull;
+      localStorage.setItem(currentStorageKey(), JSON.stringify(payload));
+      return;
+    }
     lastKnownStateUpdatedAt = payload.updatedAt;
     localStorage.setItem(currentStorageKey(), JSON.stringify(payload));
     pushStateToCloud(payload);
   }catch(e){}
 }
-/* Pousse l'état complet (vacances, surtemps, semaine courante, etc.) vers
-   Supabase — cache local (localStorage) toujours écrit en premier et reste
-   la source qui fait fonctionner l'app hors ligne; le cloud sert de
-   sauvegarde/synchro entre appareils, pas de dépendance bloquante. */
+/* Pousse l'état complet (vacances, surtemps, semaine courante, etc.) vers Supabase, et garde aussi
+   le profil (noms + dates) dans team_profiles. Le cache local (localStorage) reste la source qui fait
+   fonctionner l'app hors ligne; le cloud sert de sauvegarde/synchro entre appareils. */
 let __pushDebounceTimer = null;
 function pushStateToCloud(payload){
   if(!sb){ setSyncBadge('offline'); return; }
+  const code = getActiveTeam(); // capturé maintenant : si on change d'équipe pendant le délai, ça part au bon endroit
   setSyncBadge('pending');
   clearTimeout(__pushDebounceTimer);
+  __pushPending = true;
   __pushDebounceTimer = setTimeout(async ()=>{
     try{
-      const { error } = await sb.from('team_states').upsert({
-        team_code: getActiveTeam(),
-        state: payload
-      });
+      const { error } = await sb.from('team_states').upsert({ team_code: code, state: payload });
+      if(!error){
+        await sb.from('team_profiles').upsert({
+          team_code: code,
+          names: payload.realNames || {},
+          seniority_dates: payload.seniorityDates || {},
+          confirmed: true
+        });
+      }
+      __pushPending = false;
       setSyncBadge(error ? 'error' : 'synced');
-    }catch(e){ setSyncBadge('error'); }
-  }, 600); // petit debounce — évite un appel réseau à chaque frappe/case cochée
+    }catch(e){ __pushPending = false; setSyncBadge('error'); }
+  }, 600); // petit délai — évite un appel réseau à chaque frappe/case cochée
 }
-/* Va chercher l'état cloud le plus récent pour l'équipe active et l'applique
-   par-dessus l'état local déjà rendu (appelé après le premier rendu local,
-   pour ne jamais bloquer l'ouverture de l'app pendant l'appel réseau). */
+/* Lit le cloud pour l'équipe active et le réconcilie avec l'état local (voir les règles plus haut). */
 async function syncStateFromCloud(){
-  if(!sb) { setSyncBadge('offline'); return; }
-  try{
-    const skipTs = parseInt(localStorage.getItem('horaire-releve-skip-next-sync') || '0', 10);
-    if(skipTs && (Date.now() - skipTs) < 10000){
-      localStorage.removeItem('horaire-releve-skip-next-sync');
-      setSyncBadge('synced');
-      return;
-    }
-    if(skipTs) localStorage.removeItem('horaire-releve-skip-next-sync'); // marqueur périmé (>10s) : on ignore, pull normal ci-dessous
-  }catch(e){}
+  if(!sb){ setSyncBadge('offline'); return; }
+  const code = getActiveTeam();
+  if(!code) return;
+  if(__pushPending) return; // un envoi est en cours : la lecture suivante (retour d'onglet, reconnexion…) fera le point
   setSyncBadge('pending');
   try{
-    const { data, error } = await sb.from('team_states').select('state').eq('team_code', getActiveTeam()).maybeSingle();
+    const { data: sess } = await sb.auth.getSession();
+    if(!sess || !sess.session){ setSyncBadge('error'); return; } // sans session, le cloud est invisible (RLS) : on n'y touche pas
+    const { data, error } = await sb.from('team_states').select('state').eq('team_code', code).maybeSingle();
     if(error){ setSyncBadge('error'); return; }
-    if(data && data.state){
-      const cloudTs = typeof data.state.updatedAt === 'number' ? data.state.updatedAt : 0;
-      if(cloudTs > 0 && cloudTs <= lastKnownStateUpdatedAt){
-        // Le cloud est plus vieux (ou égal) que ce qu'on a déjà en mémoire/local — on l'ignore
-        // complètement : ni application, ni ré-écriture. C'est précisément ce qui empêchait la
-        // corruption décrite ci-dessus.
-        setSyncBadge('synced');
-        return;
-      }
-      applyLoadedState(data.state);
-      localStorage.setItem(currentStorageKey(), JSON.stringify(data.state));
-      refreshAll();
+    if(getActiveTeam() !== code) return; // équipe changée pendant la lecture
+    const cloud = (data && data.state) ? data.state : null;
+    const cloudTs = (cloud && typeof cloud.updatedAt === 'number') ? cloud.updatedAt : 0;
+    __lastCloudPullAt = Date.now();
+    cloudPullDone = true;
+
+    // 4) dates connues du cloud mais absentes ici : on les rapatrie toujours
+    if(cloud && cloud.seniorityDates && typeof cloud.seniorityDates==='object'){
+      Object.keys(cloud.seniorityDates).forEach(k=>{
+        if(cloud.seniorityDates[k] && !seniorityDates[k]) seniorityDates[k] = cloud.seniorityDates[k];
+      });
+    }
+    const localNewer = dirtyBeforePull || !cloud || cloudTs < lastKnownStateUpdatedAt;
+    if(!localNewer && (lastKnownStateUpdatedAt === 0 || cloudTs > lastKnownStateUpdatedAt)){
+      // Le cloud est plus récent (ou cet appareil n'a encore rien de fiable) : on l'applique.
+      applyingCloudState = true;
+      try{
+        applyLoadedState(cloud);
+        lastKnownStateUpdatedAt = cloudTs;
+        refreshAll(); // saveState() écrit seulement en local pendant ce temps
+      } finally { applyingCloudState = false; }
+      // Des dates présentes ici mais pas dans le cloud (ex. cloud écrasé auparavant) : on les remet dans le cloud.
+      const cd = cloud.seniorityDates || {};
+      if(Object.keys(seniorityDates).some(k=>seniorityDates[k] && !cd[k])) saveState();
+    } else if(localNewer){
+      // Local plus récent (ou cloud vide) : on pousse. saveState() met une estampille fraîche et écrit au cloud.
+      dirtyBeforePull = false;
+      saveState();
     }
     setSyncBadge('synced');
   }catch(e){ setSyncBadge('error'); }
@@ -2447,6 +2477,10 @@ function setSyncBadge(status){
   el.textContent = label; el.style.background = bg; el.style.color = fg;
 }
 window.addEventListener('online', ()=>{ setSyncBadge('pending'); if(isUnlocked() && getActiveTeam()) syncStateFromCloud(); });
+// Retour sur l'onglet / la PWA (ex. après avoir travaillé sur un autre ordinateur) : on relit le cloud.
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && isUnlocked() && getActiveTeam() && sb && cloudPullDone && Date.now() - __lastCloudPullAt > 20000) syncStateFromCloud();
+});
 window.addEventListener('offline', ()=>{ setSyncBadge('offline'); });
 
 function loadState(){
@@ -2454,12 +2488,13 @@ function loadState(){
     const raw = localStorage.getItem(currentStorageKey());
     if(!raw) return;
     const s = JSON.parse(raw);
+    if(s.v === 2 && typeof s.updatedAt === 'number') lastKnownStateUpdatedAt = s.updatedAt;
+    if(s.dirty === true) dirtyBeforePull = true; // modification locale pas encore envoyée au cloud
     applyLoadedState(s);
   }catch(e){}
 }
 function applyLoadedState(s){
   try{
-    if(typeof s.updatedAt === 'number' && s.updatedAt > lastKnownStateUpdatedAt) lastKnownStateUpdatedAt = s.updatedAt;
     if(s.seniorityDates && typeof s.seniorityDates==='object') seniorityDates = Object.assign({}, seniorityDates, s.seniorityDates);
     if(s.weekStart){
       const idx = WEEKS.findIndex(w=>ymd(w.start)===s.weekStart);
@@ -4709,7 +4744,9 @@ renderSeniorityList();
 renderNamesEditor();
 renderVacCalendarPreview();
 updateFilterBtn();
-if(vacatingCodesThisWeek(WEEKS[weekIndex]).length>0) runSimulation();/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
+if(vacatingCodesThisWeek(WEEKS[weekIndex]).length>0) runSimulation();
+bootDone = true; // à partir d'ici, un saveState() est une vraie modification de l'utilisateur
+/* Enregistrement du service worker — rend l'outil installable comme une vraie PWA
    (icône sur l'écran d'accueil, plein écran, fonctionne même hors-ligne une fois visité). */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
